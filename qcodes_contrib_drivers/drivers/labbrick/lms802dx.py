@@ -42,7 +42,7 @@ class LbB(Instrument):
         _ = self.api.get_num_devices()
         
         try:
-            self.api.init_device(self._device_id)
+            self.init_device()
         except VNXError:
             pass            
         
@@ -68,16 +68,6 @@ class LbB(Instrument):
                            label='Device Info',
                            get_cmd= lambda : self.api.get_dev_info()
                           ) 
-        
-        self.add_parameter(name='init_device',
-                           label='Initialize Device',
-                           get_cmd=lambda : self.api.init_device(self._device_id)
-                          ) #it returns 0
-        
-        self.add_parameter(name='close_device',
-                           label='Close Device',
-                           get_cmd=lambda : self.api.close_device(self._device_id)
-                          ) #it returns 0
         
         self.add_parameter(name='get_dll_version',
                            label='DLL Version',
@@ -166,7 +156,16 @@ class LbB(Instrument):
                           unit='dBm',
                           get_cmd=lambda : self.api.get_min_pwr(self._device_id)/4
                           )
-    
+
+
+    def init_device( self ):
+        ''' Initialize device '''
+        self.api.init_device( self._device_id )
+
+    def close_device( self ):
+        ''' Initialize device '''
+        self.api.close_device( self._device_id )
+
     def _freq_set_start(self, f):
         if ((self.api.get_min_freq(self._device_id) <= f and f <= api.get_max_freq(self._device_id))):
             self.sweepmode_on(True)
