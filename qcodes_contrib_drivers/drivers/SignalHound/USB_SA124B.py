@@ -28,7 +28,7 @@ class DummyArray(ParameterWithSetpoints):
         return np.random.rand(npoints)
 
 
-class USB_SA124B(Instrument):
+class USB_SA124B(VisaInstrument):
 
     def __init__(self, name, **kwargs):
 
