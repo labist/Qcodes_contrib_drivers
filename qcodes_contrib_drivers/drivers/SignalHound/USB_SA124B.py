@@ -1,10 +1,12 @@
 import numpy as np
+from typing import Sequence, Union, Any
 
-from qcodes.instrument.base import Instrument
+# from qcodes.instrument.base import Instrument
 from qcodes.dataset.measurements import Measurement
 from qcodes.utils.validators import Numbers, Arrays
 
 from qcodes.instrument.parameter import ParameterWithSetpoints, Parameter
+from qcodes import VisaInstrument
 
 class GeneratedSetPoints(Parameter):
     """
@@ -30,9 +32,11 @@ class DummyArray(ParameterWithSetpoints):
 
 class USB_SA124B(VisaInstrument):
 
-    def __init__(self, name, **kwargs):
-
-        super().__init__(name, **kwargs)
+    def __init__(self,
+                 name: str,
+                 address: str,
+                 **kwargs: Any) -> None:
+        super().__init__(name, address, terminator='\n', **kwargs)
 
         #         # Number of averages (also resets averages)
         # self.add_parameter('averages_enabled',
