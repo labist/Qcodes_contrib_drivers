@@ -3,14 +3,18 @@ from qcodes.instrument.base import Instrument
 import numpy as np
 import qcodes as qc
 import os
-import qcodes.instrument_drivers.labbrick.lowlevel.lms as lms
-from qcodes.instrument_drivers.labbrick.lowlevel.lms import default_library_location, download_lms_binaries
-from qcodes.instrument_drivers.labbrick.lowlevel.lms import VNXError
+import qcodes_contrib_drivers.drivers.labbrick.lowlevel.lms as lms
+from qcodes_contrib_drivers.drivers.labbrick.lowlevel.lms import default_library_location, download_lms_binaries
+from qcodes_contrib_drivers.drivers.labbrick.lowlevel.lms import VNXError
 
 api = lms.VNX_LSG_API.default()
 
 class LbB(Instrument):    
-    
+    ''' This will only work if you have installed the LMS binaries in lowlevel/
+    This can be attempted automatically by calling
+    from qcodes_contrib_drivers.drivers.labbrick.lowlevel import lms
+    lms.download_lms_binaries()
+    '''
     @classmethod
     def are_u_there(cls):
     # Check for DLL, if not there download

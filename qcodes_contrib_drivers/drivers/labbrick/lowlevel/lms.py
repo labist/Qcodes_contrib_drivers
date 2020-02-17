@@ -9,7 +9,7 @@ import logging
 import inspect
 from typing import List, Dict
 
-from qcodes.instrument_drivers.labbrick.lowlevel import VNXError
+from qcodes_contrib_drivers.drivers.labbrick.lowlevel import VNXError
 
 __all__ = ['download_lsg_binaries', 'VNX_LSG_API', 'LSGStatus']
 
@@ -26,7 +26,7 @@ def download_lms_binaries(target_path=None):
         raise RuntimeError('Only implemented for Windows x64 :(\n'
                            'For linux you have to compile LMShid.c to get the binary')
 
-    zip_url = 'https://vaunix.com/resources/vnx-lms-api.zip'
+    zip_url = 'https://vaunix.com/resources/vnx-api-lms-1-13-20.zip'
 
     with tempfile.TemporaryDirectory() as temp_dir:
         main_zip_file = os.path.join(temp_dir, 'vnx-lms-api.zip')
