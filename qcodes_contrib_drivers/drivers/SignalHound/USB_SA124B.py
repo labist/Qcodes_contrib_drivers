@@ -34,6 +34,7 @@ class SpectrumArray(ParameterWithSetpoints):
 
     def get_raw(self):
         # :TRACe[:DATA]? need to test this live
+        # i think we can access the visa resource with somethign like self.instrument.visa_handle
         npoints = self.root_instrument.n_points.get_latest()
         return np.random.rand(npoints)
 
