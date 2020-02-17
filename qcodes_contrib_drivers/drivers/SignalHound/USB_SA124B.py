@@ -3,7 +3,7 @@ from typing import Sequence, Union, Any
 
 # from qcodes.instrument.base import Instrument
 from qcodes.dataset.measurements import Measurement
-from qcodes.utils.validators import Numbers, Arrays
+from qcodes.utils.validators import Numbers, Arrays, Enum
 
 from qcodes.instrument.parameter import ParameterWithSetpoints, Parameter
 from qcodes import VisaInstrument
@@ -34,8 +34,10 @@ class SpectrumArray(ParameterWithSetpoints):
 
     def get_raw(self):
         # :TRACe[:DATA]? need to test this live
-        npoints = self.root_instrument.x_points.get_latest()
-        return np.random.rand(npoints)
+        # i think we can access the visa resource with somethign like self.instrument.visa_handle
+        visa_handle = self.instrument.visa_handle
+        data_str = visa_handle.query( ":TRACe:DATA?" )
+        return np.fromstring( data_str, sep=',' )
 
 
 class USB_SA124B(VisaInstrument):
@@ -84,6 +86,34 @@ class USB_SA124B(VisaInstrument):
                         set_cmd=":SENSe:FREQuency:SPAN {}",
                         get_parser=float )
 
+        self.add_parameter('rbw',
+                        unit='Hz',
+                        label='res. bandwidth',
+                        get_cmd=":SENSe:BANDwidth:RESolution?",
+                        set_cmd=":SENSe:BANDwidth:RESolution {}",
+                        get_parser=float )
+
+        self.add_parameter('vbw',
+                        unit='Hz',
+                        label='vid. bandwidth',
+                        get_cmd=":SENSe:BANDwidth:VIDeo?",
+                        set_cmd=":SENSe:BANDwidth:VIDeo {}",
+                        get_parser=float )
+
+        self.add_parameter('avg',
+                        unit='',
+                        label='averages',
+                        get_cmd=":TRACe:AVERage:COUNt?",
+                        set_cmd=":TRACe:AVERage:COUNt {:d}",
+                        get_parser=int )
+
+        self.add_parameter('type',
+                        unit='',
+                        label='averages',
+                        get_cmd=":TRACe:TYPE?",
+                        set_cmd=":TRACe:TYPE {}",
+                        vals=Enum('OFF', 'WRIT', 'AVER', 'MAX', 'MIN', 'MINMAX' ) )
+ 
         # x_ are used for computing trace x spacing
         self.add_parameter('x_start',
                         unit='',
