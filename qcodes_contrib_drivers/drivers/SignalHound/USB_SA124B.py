@@ -10,22 +10,30 @@ from qcodes import VisaInstrument
 
 class GeneratedSetPoints(Parameter):
     """
-    A parameter that generates a setpoint array from start, stop and num points
-    parameters.
+    A parameter that generates a setpoint array from start, increment, and n_points
+
+                               parameter_class=GeneratedSetPoints,
+                           startparam=self.x_start,
+                           incparam=self.x_inc,
+                           xpointsparam=self.x_points,
     """
-    def __init__(self, startparam, stopparam, numpointsparam, *args, **kwargs):
+    def __init__(self, startparam, incparam, xpointsparam, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._startparam = startparam
-        self._stopparam = stopparam
-        self._numpointsparam = numpointsparam
+        self._incparam = incparam
+        self._xpointsparam = xpointsparam
 
     def get_raw(self):
-        return np.linspace(self._startparam(), self._stopparam(),
-                              self._numpointsparam())
+        start = self._startparam()
+        inc = self._incparam()
+        npts = self._xpointsparam()
+        stop = start + inc * ( npts - 1 )
+        return np.linspace( start, stop, npts )
 
-class DummyArray(ParameterWithSetpoints):
+class SpectrumArray(ParameterWithSetpoints):
 
     def get_raw(self):
+        # :TRACe[:DATA]? need to test this live
         npoints = self.root_instrument.n_points.get_latest()
         return np.random.rand(npoints)
 
@@ -51,32 +59,59 @@ class USB_SA124B(VisaInstrument):
                            get_cmd=":SENSe:FREQuency:STARt?",
                            set_cmd=":SENSe:FREQuency:STARt {}" )
 
-        # self.add_parameter('f_stop',
-        #                    unit='Hz',
-        #                    label='f stop',
-        #                    vals=Numbers(1,1e3),
-        #                    get_cmd=None,
-        #                    set_cmd=None)
+        self.add_parameter('f_stop',
+                           unit='Hz',
+                           label='f stop',
+                           vals=Numbers(0,13e9),
+                           get_cmd=":SENSe:FREQuency:STOP?",
+                           set_cmd=":SENSe:FREQuency:STOP {}" )
 
-        # self.add_parameter('n_points',
-        #                    unit='',
-        #                    initial_value=10,
-        #                    vals=Numbers(1,1e3),
-        #                    get_cmd=None,
-        #                    set_cmd=None)
+        self.add_parameter('f_center',
+                        unit='Hz',
+                        label='f center',
+                        vals=Numbers(0,13e9),
+                        get_cmd=":SENSe:FREQuency:CENTER?",
+                        set_cmd=":SENSe:FREQuency:CENTER {}" )
 
-        # self.add_parameter('freq_axis',
-        #                    unit='Hz',
-        #                    label='Freq Axis',
-        #                    parameter_class=GeneratedSetPoints,
-        #                    startparam=self.f_start,
-        #                    stopparam=self.f_stop,
-        #                    numpointsparam=self.n_points,
-        #                    vals=Arrays(shape=(self.n_points.get_latest,)))
+        self.add_parameter('f_span',
+                        unit='Hz',
+                        label='f span',
+                        vals=Numbers(0,13e9),
+                        get_cmd=":SENSe:FREQuency:SPAN?",
+                        set_cmd=":SENSe:FREQuency:SPAN {}" )
 
-        # self.add_parameter('spectrum',
-        #            unit='dBm',
-        #            setpoints=(self.freq_axis,),
-        #            label='Spectrum',
-        #            parameter_class=DummyArray,
-        #            vals=Arrays(shape=(self.n_points.get_latest,)))
+        # x_ are used for computing trace x spacing
+        self.add_parameter('x_start',
+                        unit='',
+                        label='x start',
+                        get_cmd=":TRACe:XSTARt?",
+                        set_cmd="" )
+
+        self.add_parameter('x_inc',
+                        unit='',
+                        label='x increment',
+                        get_cmd=":TRACe:XSTARt?",
+                        set_cmd="" )
+
+        self.add_parameter('x_points',
+                           unit='',
+                           initial_value=10,
+                           vals=Numbers(1,1e9),
+                           get_cmd=":TRACe:POINts?",
+                           set_cmd="")
+
+        self.add_parameter('freq_axis',
+                           unit='Hz',
+                           label='Freq',
+                           parameter_class=GeneratedSetPoints,
+                           startparam=self.x_start,
+                           incparam=self.x_inc,
+                           xpointsparam=self.x_points,
+                           vals=Arrays(shape=(self.n_points.get_latest,)))
+
+        self.add_parameter('spectrum',
+                   unit='dBm',
+                   setpoints=(self.freq_axis,),
+                   label='Noise power',
+                   parameter_class=SpectrumArray,
+                   vals=Arrays(shape=(self.n_points.get_latest,)))
