@@ -152,3 +152,17 @@ class USB_SA124B(VisaInstrument):
                    label='Noise power',
                    parameter_class=SpectrumArray,
                    vals=Arrays(shape=(self.x_points.get_latest,)))
+
+        self.add_parameter('ch_pwr',
+                        unit='dBm',
+                        label='Channel Power',
+                        get_cmd=":SENSe:CHPower:CHPower?",
+                        set_cmd="",
+                        get_parser=float )
+
+        self.add_parameter('ch_pwr_state',
+                        unit='',
+                        label='Channel Power State',
+                        get_cmd=":SENSe:CHPower:STATe?",
+                        set_cmd=":SENSe:CHPower:STATe {}",
+                        vals=Enum('ON', 'OFF', '1', '0' ) )
