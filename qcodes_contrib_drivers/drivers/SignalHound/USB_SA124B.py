@@ -166,3 +166,10 @@ class USB_SA124B(VisaInstrument):
                         get_cmd=":SENSe:CHPower:STATe?",
                         set_cmd=":SENSe:CHPower:STATe {}",
                         vals=Enum('ON', 'OFF', '1', '0' ) )
+
+        self.add_parameter('ch_pwr_width',
+                unit='Hz',
+                label='Channel Power Width',
+                get_cmd=":SENSe:CHPower:WIDTH?",
+                set_cmd=":SENSe:CHPower:WIDTH {}",
+                get_parser=float )
