@@ -27,7 +27,7 @@ class IVVI(VisaInstrument):
     A copy of this file can be found at the bottom of this file.
     '''
     
-    full_range = 4000.0
+    full_range = 4.0
     half_range = full_range / 2
     resolution = 16
     dac_quata = full_range / 2**resolution
