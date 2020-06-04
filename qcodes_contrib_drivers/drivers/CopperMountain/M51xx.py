@@ -111,10 +111,10 @@ class CMTPort(InstrumentChannel):
         super().__init__(parent, name)
 
         self.port = int(port)
-        if self.port < 1 or self.port > 4:
-            raise ValueError("Port must be between 1 and 4.")
+        if self.port < 1 or self.port > 1:
+            raise ValueError("Port must be 1.")
 
-        pow_cmd = f"SOUR:POW{self.port}"
+        pow_cmd = f"SOUR{self.port}:POW"
         self.add_parameter("source_power",
                            label="power",
                            unit="dBm",
@@ -263,7 +263,7 @@ class CMTTrace(InstrumentChannel):
         """
         if not re.match("S[1-4][1-4]", val):
             raise ValueError("Invalid S parameter spec")
-        self.write(f"CALC:PAR:MOD:EXT \"{val}\"")
+        self.write(f"CALC:PAR:SEL \"{val}\"")
 
 class CMTBase(VisaInstrument):
     """
@@ -380,9 +380,10 @@ class CMTBase(VisaInstrument):
                            vals=Numbers(min_value=0, max_value=100000))
 
         # Sweep Time
+        # SYST:CYCL:TIME:MEAS?
         self.add_parameter('sweep_time',
                            label='Time',
-                           get_cmd='SENS:SWE:TIME?',
+                           get_cmd='SYST:CYCL:TIME:MEAS?',
                            get_parser=float,
                            unit='s',
                            vals=Numbers(0, 1e6))
@@ -392,9 +393,10 @@ class CMTBase(VisaInstrument):
                            get_cmd='INIT:CONT?',
                            set_cmd='INIT:CONT {}',
                            vals=Ints( 0, 1 ))
-        # Group trigger count
-        self.add_parameter('group_trigger_count',
-                           get_cmd="SENS:PAR:COUN?",
+        # Number of traces in the channel
+        # TODO: this shoudl probably be moved to port
+        self.add_parameter('trace_count',
+                           get_cmd="CALC:PAR:COUN?",
                            get_parser=int,
                            set_cmd="SENS:PAR:COUN {}",
                            vals=Ints(1, 2000000))
@@ -488,8 +490,15 @@ class CMTBase(VisaInstrument):
 
         The format of the returned trace is:
             trace_name,trace_type,trace_name,trace_type...
+        we will use
+        tr1_sxx,sxx,tr2_sxx_sxx,...
         """
-        return self.ask("CALC:PAR:DEF?").strip('"')
+        catalog = ""
+        for n in range( self.trace_count() ):
+            query = f"CALC:PAR{n+1}:DEF?"
+            s = self.ask(query).strip('"')
+            catalog += f"tr{n+1}_{s},{s},"
+        return catalog[:-1]
 
     def select_trace_by_name(self, trace_name: str) -> int:
         """

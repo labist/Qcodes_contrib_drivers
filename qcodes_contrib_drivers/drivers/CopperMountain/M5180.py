@@ -5,6 +5,6 @@ class M5180(M51xx.CMTxBase):
         super().__init__(name, address,
                          min_freq=3e5, max_freq=18e9,
                          min_power=-30, max_power=13,
-                         nports=2,
+                         nports=1,
                          **kwargs)
 
