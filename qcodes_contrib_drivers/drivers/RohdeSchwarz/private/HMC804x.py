@@ -100,7 +100,7 @@ class RohdeSchwarzHMC804xBIP(InstrumentChannel):
 
         self.pos_channel = pos_channel
         self.neg_channel = neg_channel
-        # TODO : zero and turn off both outputs or find the current values
+
         self.add_parameter("set_voltage",
                            label='Target voltage output',
                            set_cmd=self._set_voltage,
@@ -137,7 +137,7 @@ class RohdeSchwarzHMC804xBIP(InstrumentChannel):
         """ Set current. If > 0, set neg_channel to zero and turn off.
         then set pos_channel
         """
-        if i >= 0 :
+        if i > 0 :
             self._zero_and_off( self.neg_channel )
             self.pos_channel.smrt_current(i)
             self.pos_channel.state('ON')
@@ -145,23 +145,35 @@ class RohdeSchwarzHMC804xBIP(InstrumentChannel):
             self._zero_and_off( self.pos_channel )
             self.neg_channel.smrt_current(abs(i))
             self.neg_channel.state('ON') 
+        elif i == 0 : # both outputs off
+            self._zero_and_off( self.pos_channel )
+            self._zero_and_off( self.neg_channel )
 
     def _get_current( self ):
         """ Get the current
         """
         chan, sign = self._active_chan()
-        return sign * chan.smrt_current()
+        if chan is None :
+            return 0
+        else :
+            return sign * chan.smrt_current()
 
     def _current( self ):
         """ Get the measured current
         """
         chan, sign = self._active_chan()
-        return sign * chan.current()
+        if chan is None :
+            return 0
+        else :
+            return sign * chan.current()
 
     def _voltage( self ):
         ''' Return measured voltage '''
         chan, sign = self._active_chan()
-        return sign * chan.voltage()
+        if chan is None :
+            raise ValueError( "No channel is turned on. Voltage unknown.")
+        else :
+            return sign * chan.voltage()
 
     def _set_voltage( self, v ) :
         ''' Set voltage. If > 0, set neg_channel to zero and turn off.
@@ -181,6 +193,9 @@ class RohdeSchwarzHMC804xBIP(InstrumentChannel):
         '''
 
         chan, sign = self._active_chan()
+        if chan is None :
+            raise ValueError( "No channel is turned on. Voltage unknown.")
+
         return sign * chan.set_voltage()
 
     def _active_chan( self ):
@@ -192,7 +207,7 @@ class RohdeSchwarzHMC804xBIP(InstrumentChannel):
         if sm and sp :
             raise ValueError( 'Both channels are on.' )
         if not (sm or sp) :
-            raise ValueError( 'Neither channel is on.' )
+            return None, 1
         if sp :
             return self.pos_channel, 1
         if sm :
