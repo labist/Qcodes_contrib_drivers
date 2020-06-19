@@ -6,7 +6,7 @@ import logging
 import numpy as np
 from pyvisa import VisaIOError, errors
 from qcodes import (VisaInstrument, InstrumentChannel, ArrayParameter,
-                    ChannelList)
+                    ChannelList, Parameter)
 from qcodes.utils.validators import Ints, Numbers, Enum, Bool
 
 logger = logging.getLogger()
@@ -82,7 +82,7 @@ class FormattedSweep(CMTSweep):
         root_instr.format( self.sweep_format )
         self.instrument.write('TRIG:SEQ:SING') #Trigger a single sweep
         self.instrument.ask('*OPC?') #Wait for measurement to complete
-        cmd = f"CALC1:TRAC{self.trace_num}:DATA:FDAT?"
+        cmd = f"CALC:TRAC{self.trace_num}:DATA:FDAT?"
         S11 = self.instrument.ask(cmd) #Get data as string
         # S21 = self.instrument.ask("CALC1:TRAC2:DATA:FDAT?") #Get data as string
 
@@ -292,6 +292,8 @@ class CMTBase(VisaInstrument):
         super().__init__(name, address, terminator='\n', **kwargs)
         self.min_freq = min_freq
         self.max_freq = max_freq
+        # set the active trace to 1 since we can't figure out how to read it out
+        self.select_trace_by_name( "tr1" )
 
         #Ports
         ports = ChannelList(self, "CMTPorts", CMTPort)
@@ -418,10 +420,10 @@ class CMTBase(VisaInstrument):
         # Traces
         self.add_parameter('active_trace',
                            label='Active Trace',
-                           get_cmd="CALC:PAR:SPOR?",
                            get_parser=int,
-                           set_cmd="CALC:PAR:SPOR {}",
+                           set_cmd="CALC:PAR{}:SEL",
                            vals=Numbers(min_value=1, max_value=24))
+        self.active_trace.get = lambda : self._active_trace
         # Note: Traces will be accessed through the traces property which
         # updates the channellist to include only active trace numbers
         self._traces = ChannelList(self, "CMTTraces", CMTTrace)
@@ -516,8 +518,10 @@ class CMTBase(VisaInstrument):
         Returns:
             The trace number of the selected trace
         """
-        self.write(f"CALC:PAR:SEL '{trace_name}'")
-        return self.active_trace()
+        tr_num = int( trace_name[2] )
+        self.write(f"CALC:PAR{tr_num}:SEL")
+        self._active_trace = tr_num
+        return tr_num
 
     def reset_averages(self):
         """
