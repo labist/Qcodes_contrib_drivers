@@ -52,7 +52,6 @@ class FormattedSweep(CMTSweep):
     def __init__(self,
                  name: str,
                  instrument: 'CMTBase',
-                 trace_num: int,
                  sweep_format: str,
                  label: str,
                  unit: str,
@@ -65,7 +64,6 @@ class FormattedSweep(CMTSweep):
                          setpoint_labels=('Frequency',),
                          setpoint_units=('Hz',)
                          )
-        self.trace_num = trace_num
         self.sweep_format = sweep_format
         self.memory = memory
 
@@ -82,7 +80,8 @@ class FormattedSweep(CMTSweep):
         root_instr.format( self.sweep_format )
         self.instrument.write('TRIG:SEQ:SING') #Trigger a single sweep
         self.instrument.ask('*OPC?') #Wait for measurement to complete
-        cmd = f"CALC:TRAC{self.trace_num}:DATA:FDAT?"
+        # cmd = f"CALC:TRAC{self.trace_num}:DATA:FDAT?"
+        cmd = f"CALC:DATA:FDAT?"
         S11 = self.instrument.ask(cmd) #Get data as string
         # S21 = self.instrument.ask("CALC1:TRAC2:DATA:FDAT?") #Get data as string
 
@@ -170,43 +169,36 @@ class CMTTrace(InstrumentChannel):
                            sweep_format='MLOG',
                            label='Magnitude',
                            unit='dB',
-                           trace_num=self.trace_num,
                            parameter_class=FormattedSweep)
         self.add_parameter('linear_magnitude',
                            sweep_format='MLIN',
                            label='Magnitude',
                            unit='ratio',
-                           trace_num=self.trace_num,
                            parameter_class=FormattedSweep)
         self.add_parameter('phase',
                            sweep_format='PHAS',
                            label='Phase',
                            unit='deg',
-                           trace_num=self.trace_num,
                            parameter_class=FormattedSweep)
         self.add_parameter('unwrapped_phase',
                            sweep_format='UPH',
                            label='Phase',
                            unit='deg',
-                           trace_num=self.trace_num,
                            parameter_class=FormattedSweep)
         self.add_parameter("group_delay",
                            sweep_format='GDEL',
                            label='Group Delay',
                            unit='s',
-                           trace_num=self.trace_num,
                            parameter_class=FormattedSweep)
         self.add_parameter('real',
                            sweep_format='REAL',
                            label='Real',
                            unit='LinMag',
-                           trace_num=self.trace_num,
                            parameter_class=FormattedSweep)
         self.add_parameter('imaginary',
                            sweep_format='IMAG',
                            label='Imaginary',
                            unit='LinMag',
-                           trace_num=self.trace_num,
                            parameter_class=FormattedSweep)
 
     def run_sweep(self) -> str:
