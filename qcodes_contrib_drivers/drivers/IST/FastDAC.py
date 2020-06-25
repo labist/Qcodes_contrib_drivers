@@ -23,7 +23,7 @@ from qcodes.instrument.parameter import ManualParameter
 from qcodes.utils.validators import Bool, Numbers
 
 
-Fullrange = 8192 ##is now +-4.096V as we've changed the voltage reference, pet 4.5.20
+Fullrange = 8.192 ##is now +-4.096V as we've changed the voltage reference, pet 4.5.20
 Halfrange = Fullrange / 2
 
 #this driver is used for the fast IST DAC. It has to be perfectioned by a skilled programmer 
