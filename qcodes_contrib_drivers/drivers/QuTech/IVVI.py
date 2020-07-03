@@ -130,7 +130,7 @@ class IVVI(VisaInstrument):
             self.add_parameter(
                 'dac{}'.format(i),
                 label='Dac {}'.format(i),
-                unit='mV',
+                unit='V',
                 get_cmd=self._gen_ch_get_func(self._get_dac, i),
                 set_cmd=self._gen_ch_set_func(self._set_dac, i),
                 vals=vals.Numbers(self.pol_num[i - 1],
