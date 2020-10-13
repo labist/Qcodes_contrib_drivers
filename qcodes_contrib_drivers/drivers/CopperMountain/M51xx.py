@@ -79,6 +79,7 @@ class FormattedSweep(CMTSweep):
         #Trigger a measurement
         root_instr.format( self.sweep_format )
         self.instrument.write('TRIG:SEQ:SING') #Trigger a single sweep
+        self.instrument.write('TRIG:WAIT ENDM') #Trigger a single sweep
         self.instrument.ask('*OPC?') #Wait for measurement to complete
         # cmd = f"CALC:TRAC{self.trace_num}:DATA:FDAT?"
         cmd = f"CALC:DATA:FDAT?"
