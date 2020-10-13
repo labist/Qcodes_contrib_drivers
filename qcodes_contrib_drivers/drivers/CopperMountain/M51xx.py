@@ -70,14 +70,14 @@ class FormattedSweep(CMTSweep):
     def get_raw(self) -> Sequence[float]:
         if self._instrument is None:
             raise RuntimeError("Cannot get data without instrument")
-        root_instr = self._instrument.root_instrument
+
         # Check if we should run a new sweep
         # if root_instr.auto_sweep():
         #     prev_mode = self._instrument.run_sweep()
         # Ask for data, setting the format to the requested form
         # self._instrument.format(self.sweep_format)
         #Trigger a measurement
-        root_instr.format( self.sweep_format )
+        self.instrument.format( self.sweep_format )
         self.instrument.write('TRIG:SEQ:SING') #Trigger a single sweep
         self.instrument.write('TRIG:WAIT ENDM') #Trigger a single sweep
         self.instrument.ask('*OPC?') #Wait for measurement to complete
