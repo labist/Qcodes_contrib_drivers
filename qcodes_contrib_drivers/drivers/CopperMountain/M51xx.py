@@ -191,6 +191,14 @@ class CMTTrace(InstrumentChannel):
                            label='Group Delay',
                            unit='s',
                            parameter_class=FormattedSweep)
+        self.add_parameter('electrical_delay',
+                           label='Electrical Delay',
+                           get_cmd='CALC:TRAC' + str( trace_num ) + ':CORR:EDEL:TIME?',
+                           get_parser=float,
+                           set_cmd='CALC:TRAC' + str( trace_num ) + ':CORR:EDEL:TIME {:.6e}',
+                           unit='s',
+                           vals=Numbers(min_value=0, max_value=100000))
+
         self.add_parameter('real',
                            sweep_format='REAL',
                            label='Real',
