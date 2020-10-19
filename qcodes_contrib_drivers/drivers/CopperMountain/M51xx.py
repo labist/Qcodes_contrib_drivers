@@ -61,7 +61,7 @@ class FormattedSweep(CMTSweep):
                          label=label,
                          unit=unit,
                          setpoint_names=('frequency',),
-                         setpoint_labels=('Frequency',),
+                         setpoint_labels=('$f_{\mathrm{VNA}}$',),
                          setpoint_units=('Hz',)
                          )
         self.sweep_format = sweep_format
@@ -118,7 +118,7 @@ class CMTPort(InstrumentChannel):
 
         pow_cmd = f"SOUR{self.port}:POW"
         self.add_parameter("source_power",
-                           label="power",
+                           label="$P_{\mathrm{VNA}}$",
                            unit="dBm",
                            get_cmd=f"{pow_cmd}?",
                            set_cmd=f"{pow_cmd} {{}}",
@@ -168,7 +168,7 @@ class CMTTrace(InstrumentChannel):
         # And a list of individual formats
         self.add_parameter('magnitude',
                            sweep_format='MLOG',
-                           label='Magnitude',
+                           label='$|S_{21}|$',
                            unit='dB',
                            parameter_class=FormattedSweep)
         self.add_parameter('linear_magnitude',
@@ -178,11 +178,11 @@ class CMTTrace(InstrumentChannel):
                            parameter_class=FormattedSweep)
         self.add_parameter('phase',
                            sweep_format='PHAS',
-                           label='Phase',
+                           label='$\phi_{\mathrm{VNA}}$',
                            unit='deg',
                            parameter_class=FormattedSweep)
         self.add_parameter('unwrapped_phase',
-                           sweep_format='UPH',
+                           sweep_format='$\phi_{\mathrm{VNA}}$',
                            label='Phase',
                            unit='deg',
                            parameter_class=FormattedSweep)
@@ -198,6 +198,29 @@ class CMTTrace(InstrumentChannel):
                            set_cmd='CALC:TRAC' + str( trace_num ) + ':CORR:EDEL:TIME {:.6e}',
                            unit='s',
                            vals=Numbers(min_value=0, max_value=100000))
+        
+        # Marker
+        self.add_parameter('marker_trans',
+                           label='$\mathrm{S}_{21}$',
+                           get_cmd=self._marker_tr,
+                           get_parser=float,
+                           set_cmd='CALC1:TRAC1:MARK:Y {}',
+                           unit='dB')
+                           
+
+        self.add_parameter('marker_freq',
+                           label='$f_{\mathrm{marker}}$',
+                           get_cmd='CALC1:MARK:X?',
+                           get_parser=float,
+                           set_cmd='CALC1:MARK:X {}',
+                           unit='Hz')
+        
+        self.add_parameter('marker_phase',
+                           label='$\phi_{\mathrm{marker}}$',
+                           get_cmd=self._marker_ph,
+                           get_parser=float,
+                           set_cmd='CALC1:TRAC2:MARK:X {}',
+                           unit='Degrees')
 
         self.add_parameter('real',
                            sweep_format='REAL',
@@ -266,6 +289,20 @@ class CMTTrace(InstrumentChannel):
                 return param
         raise RuntimeError("Can't find selected trace on the CMT")
 
+    def _marker_tr(self) -> str:
+        """
+        Get magnitude of marker 1
+        """
+        self.root_instrument.ask('*OPC?\n')
+        return self.root_instrument.ask('CALC1:TRAC1:MARK:Y?').split(',')[0]
+
+    def _marker_ph(self) -> str:
+        """
+        Get phase of marker 1
+        """
+        self.root_instrument.ask('*OPC?\n')
+        return self.root_instrument.ask('CALC1:TRAC2:MARK:Y?').split(',')[0]
+
     def _set_Sparam(self, val: str) -> None:
         """
         Set an S-parameter, in the format S<a><b>, where a and b
@@ -308,7 +345,7 @@ class CMTBase(VisaInstrument):
 
         # Drive power
         self.add_parameter('power',
-                           label='Power',
+                           label='$P_{\mathrm{VNA}}$',
                            get_cmd='SOUR:POW?',
                            get_parser=float,
                            set_cmd='SOUR:POW {:.2f}',
@@ -390,6 +427,7 @@ class CMTBase(VisaInstrument):
                            set_cmd='CALC:CORR:EDEL:TIME {:.6e}',
                            unit='s',
                            vals=Numbers(min_value=0, max_value=100000))
+
 
         # Sweep Time
         # SYST:CYCL:TIME:MEAS?
