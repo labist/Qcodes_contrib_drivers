@@ -96,7 +96,7 @@ class FormattedSweep(CMTSweep):
         # if root_instr.auto_sweep():
         #     root_instr.sweep_mode(prev_mode)
 
-        return S11[::2]
+        return np.array( S11[::2] )
 
 class CMTPort(InstrumentChannel):
     """
@@ -222,6 +222,12 @@ class CMTTrace(InstrumentChannel):
                            set_cmd='CALC1:TRAC2:MARK:X {}',
                            unit='Degrees')
 
+        self.add_parameter('marker_Q',
+                           label='$Q$',
+                           get_cmd=self._marker_Q,
+                           get_parser=float,
+                           unit='Degrees')
+
         self.add_parameter('real',
                            sweep_format='REAL',
                            label='Real',
@@ -302,6 +308,13 @@ class CMTTrace(InstrumentChannel):
         """
         self.root_instrument.ask('*OPC?\n')
         return self.root_instrument.ask('CALC1:TRAC2:MARK:Y?').split(',')[0]
+
+    def _marker_Q(self) -> str:
+        """
+        Get Q of marker 1
+        """
+        self.root_instrument.ask('*OPC?\n')
+        return self.root_instrument.ask('CALC1:TRAC1:MARK:BWID:DATA?').split(',')[2]
 
     def _set_Sparam(self, val: str) -> None:
         """
@@ -407,7 +420,7 @@ class CMTBase(VisaInstrument):
                            get_parser=float,
                            set_cmd='SENS:FREQ:SPAN {}',
                            unit='Hz',
-                           vals=Numbers(min_value=min_freq,
+                           vals=Numbers(min_value=0,
                                         max_value=max_freq))
 
         # Number of points in a sweep
