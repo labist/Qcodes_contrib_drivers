@@ -226,7 +226,7 @@ class CMTTrace(InstrumentChannel):
                            label='$Q$',
                            get_cmd=self._marker_Q,
                            get_parser=float,
-                           unit='Degrees')
+                           unit='')
 
         self.add_parameter('real',
                            sweep_format='REAL',
