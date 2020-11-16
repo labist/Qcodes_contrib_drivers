@@ -37,8 +37,13 @@ class CMTSweep(ArrayParameter):
         if self._instrument is None:
             raise RuntimeError("Cannot return setpoints if not attached "
                                "to instrument")
-        start = self._instrument.root_instrument.start()
-        stop = self._instrument.root_instrument.stop()
+        # if its in zero span, return duration of sweep
+
+        vna = self._instrument.root_instrument
+        if vna.span() == 0 :
+            raise ValueError( 'In zero span mode. use magnitude_time or phase_time parameters' )
+        start = vna.start()
+        stop = vna.stop()
         return (np.linspace(start, stop, self.shape[0]),)
     @setpoints.setter
     def setpoints(self, val: Sequence[int]) -> None:
@@ -61,7 +66,7 @@ class FormattedSweep(CMTSweep):
                          label=label,
                          unit=unit,
                          setpoint_names=('frequency',),
-                         setpoint_labels=('Frequency',),
+                         setpoint_labels=('$f_{\mathrm{VNA}}$',),
                          setpoint_units=('Hz',)
                          )
         self.sweep_format = sweep_format
@@ -72,31 +77,76 @@ class FormattedSweep(CMTSweep):
             raise RuntimeError("Cannot get data without instrument")
 
         # Check if we should run a new sweep
-        # if root_instr.auto_sweep():
-        #     prev_mode = self._instrument.run_sweep()
-        # Ask for data, setting the format to the requested form
-        # self._instrument.format(self.sweep_format)
-        #Trigger a measurement
+        
         self.instrument.format( self.sweep_format )
         self.instrument.write('TRIG:SEQ:SING') #Trigger a single sweep
         self.instrument.write('TRIG:WAIT ENDM') #Trigger a single sweep
         self.instrument.ask('*OPC?') #Wait for measurement to complete
-        # cmd = f"CALC:TRAC{self.trace_num}:DATA:FDAT?"
+
         cmd = f"CALC:DATA:FDAT?"
         S11 = self.instrument.ask(cmd) #Get data as string
-        # S21 = self.instrument.ask("CALC1:TRAC2:DATA:FDAT?") #Get data as string
+
 
         #Chage the string values into numbers
         S11 = [float(s) for s in S11.split(',')]
-        # S21 = [float(s) for s in S21]
-        # Freq = [float(f)/1e6 for f in Freq]
-        # data = [Freq, S11, S21]
-        # data = np.array(data)
-        # Restore previous state if it was changed
-        # if root_instr.auto_sweep():
-        #     root_instr.sweep_mode(prev_mode)
 
-        return S11[::2]
+        return np.array( S11[::2] )
+
+class TimeSweep(FormattedSweep):
+    """ Set special sweeper for time.
+    Has different x units and get setpoints differently
+    """
+    def __init__(self,
+                 name: str,
+                 instrument: 'CMTBase',
+                 sweep_format: str,
+                 label: str,
+                 unit: str,
+                 memory: bool = False) -> None:
+        CMTSweep.__init__( self, name,
+                         instrument=instrument,
+                         label=label,
+                         unit=unit,
+                         setpoint_names=('time',),
+                         setpoint_labels=('$t_{\\mathrm{VNA}}$',),
+                         setpoint_units=('s',)
+                         )
+        self.sweep_format = sweep_format
+        self.memory = memory
+
+    @property  # type: ignore[override]
+    def setpoints(self) -> Sequence:  # type: ignore[override]
+        if self._instrument is None:
+            raise RuntimeError("Cannot return setpoints if not attached "
+                               "to instrument")
+        # if its in zero span, return duration of sweep
+
+        vna = self._instrument.root_instrument
+        if vna.span() != 0 :
+            raise ValueError( 'Not in zero span mode. Set span to zero and place marker at end of time trace to continue.' )
+        
+        start = 0
+        stop = vna.marker_x()
+        return (np.linspace(start, stop, self.shape[0]),)
+
+    @setpoints.setter
+    def setpoints(self, val: Sequence[int]) -> None:
+        pass
+
+    # @property  # type: ignore[override]
+    # def setpoints(self) -> Sequence:  # type: ignore[override]
+    #     if self._instrument is None:
+    #         raise RuntimeError("Cannot return setpoints if not attached "
+    #                            "to instrument")
+    #     # if its in zero span, return duration of sweep
+    #     vna = self._instrument.root_instrument
+    #     if vna.span() == 0.0 :
+    #         start = 0
+    #         stop = vna.marker_x() # HACK: place the marker at the end of the trace
+    #     else :
+    #         raise ValueError( 'span is not 0. Set it to zero and place marker at the end of the trace.' )
+        
+    #     return (np.linspace(start, stop, self.shape[0]),)
 
 class CMTPort(InstrumentChannel):
     """
@@ -118,7 +168,7 @@ class CMTPort(InstrumentChannel):
 
         pow_cmd = f"SOUR{self.port}:POW"
         self.add_parameter("source_power",
-                           label="power",
+                           label="$P_{\mathrm{VNA}}$",
                            unit="dBm",
                            get_cmd=f"{pow_cmd}?",
                            set_cmd=f"{pow_cmd} {{}}",
@@ -166,9 +216,20 @@ class CMTTrace(InstrumentChannel):
                                      'UPH', 'IMAG', 'REAL'))
 
         # And a list of individual formats
+        self.add_parameter('phase_time',
+                           sweep_format='UPH',
+                           label='$\phi_{\mathrm{VNA}}$',
+                           unit='deg',
+                           parameter_class=TimeSweep )
+        self.add_parameter('magnitude_time',
+                           sweep_format='MLOG',
+                           label='$|S_{21}|$',
+                           unit='dB',
+                           parameter_class=TimeSweep)  
+
         self.add_parameter('magnitude',
                            sweep_format='MLOG',
-                           label='Magnitude',
+                           label='$|S_{21}|$',
                            unit='dB',
                            parameter_class=FormattedSweep)
         self.add_parameter('linear_magnitude',
@@ -178,7 +239,7 @@ class CMTTrace(InstrumentChannel):
                            parameter_class=FormattedSweep)
         self.add_parameter('phase',
                            sweep_format='PHAS',
-                           label='Phase',
+                           label='$\phi_{\mathrm{VNA}}$',
                            unit='deg',
                            parameter_class=FormattedSweep)
         self.add_parameter('unwrapped_phase',
@@ -191,6 +252,41 @@ class CMTTrace(InstrumentChannel):
                            label='Group Delay',
                            unit='s',
                            parameter_class=FormattedSweep)
+        self.add_parameter('electrical_delay',
+                           label='Electrical Delay',
+                           get_cmd='CALC:TRAC' + str( trace_num ) + ':CORR:EDEL:TIME?',
+                           get_parser=float,
+                           set_cmd='CALC:TRAC' + str( trace_num ) + ':CORR:EDEL:TIME {:.6e}',
+                           unit='s',
+                           vals=Numbers(min_value=0, max_value=100000))
+        
+        # Marker
+        self.add_parameter('marker_y',
+                           label='$\mathrm{S}_{21}$',
+                           get_cmd=self._marker_tr,
+                           get_parser=float,
+                           set_cmd='CALC1:TRAC1:MARK:Y {}',
+                           unit='dB')
+        self.add_parameter('marker_x',
+                           label='$f_{\mathrm{marker}}$',
+                           get_cmd='CALC1:MARK:X?',
+                           get_parser=float,
+                           set_cmd='CALC1:MARK:X {}',
+                           unit='Hz')
+        
+        self.add_parameter('marker_phase',
+                           label='$\phi_{\mathrm{marker}}$',
+                           get_cmd=self._marker_ph,
+                           get_parser=float,
+                           set_cmd='CALC1:TRAC2:MARK:X {}',
+                           unit='Degrees')
+
+        self.add_parameter('marker_Q',
+                           label='$Q$',
+                           get_cmd=self._marker_Q,
+                           get_parser=float,
+                           unit='')
+
         self.add_parameter('real',
                            sweep_format='REAL',
                            label='Real',
@@ -258,6 +354,27 @@ class CMTTrace(InstrumentChannel):
                 return param
         raise RuntimeError("Can't find selected trace on the CMT")
 
+    def _marker_tr(self) -> str:
+        """
+        Get magnitude of marker 1
+        """
+        self.root_instrument.ask('*OPC?\n')
+        return self.root_instrument.ask('CALC1:TRAC1:MARK:Y?').split(',')[0]
+
+    def _marker_ph(self) -> str:
+        """
+        Get phase of marker 1
+        """
+        self.root_instrument.ask('*OPC?\n')
+        return self.root_instrument.ask('CALC1:TRAC2:MARK:Y?').split(',')[0]
+
+    def _marker_Q(self) -> str:
+        """
+        Get Q of marker 1
+        """
+        self.root_instrument.ask('*OPC?\n')
+        return self.root_instrument.ask('CALC1:TRAC1:MARK:BWID:DATA?').split(',')[2]
+
     def _set_Sparam(self, val: str) -> None:
         """
         Set an S-parameter, in the format S<a><b>, where a and b
@@ -300,7 +417,7 @@ class CMTBase(VisaInstrument):
 
         # Drive power
         self.add_parameter('power',
-                           label='Power',
+                           label='$P_{\mathrm{VNA}}$',
                            get_cmd='SOUR:POW?',
                            get_parser=float,
                            set_cmd='SOUR:POW {:.2f}',
@@ -362,7 +479,7 @@ class CMTBase(VisaInstrument):
                            get_parser=float,
                            set_cmd='SENS:FREQ:SPAN {}',
                            unit='Hz',
-                           vals=Numbers(min_value=min_freq,
+                           vals=Numbers(min_value=0,
                                         max_value=max_freq))
 
         # Number of points in a sweep
@@ -382,6 +499,7 @@ class CMTBase(VisaInstrument):
                            set_cmd='CALC:CORR:EDEL:TIME {:.6e}',
                            unit='s',
                            vals=Numbers(min_value=0, max_value=100000))
+
 
         # Sweep Time
         # SYST:CYCL:TIME:MEAS?
