@@ -448,6 +448,14 @@ class CMTBase(VisaInstrument):
                            unit='',
                            vals=Numbers(min_value=1, max_value=65536))
 
+        # RF OUT -> Turns the VNA ON/OFF
+
+        self.add_parameter('RF_Out',
+                           label='RF Out',
+                           get_cmd="OUTP:STAT?",
+                           set_cmd="OUTP:STAT {}",
+                           val_mapping={True: '1', False: '0'})
+
         # Setting frequency range
         self.add_parameter('start',
                            label='Start Frequency',
