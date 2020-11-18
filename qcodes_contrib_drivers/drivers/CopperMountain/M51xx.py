@@ -440,6 +440,7 @@ class CMTBase(VisaInstrument):
                            get_cmd="SENS:AVER?",
                            set_cmd="SENS:AVER {}",
                            val_mapping={True: '1', False: '0'})
+                           
         self.add_parameter('averages',
                            label='Averages',
                            get_cmd='SENS:AVER:COUN?',
@@ -450,7 +451,7 @@ class CMTBase(VisaInstrument):
 
         # RF OUT -> Turns the VNA ON/OFF
 
-        self.add_parameter('RF_Out',
+        self.add_parameter('rf_out',
                            label='RF Out',
                            get_cmd="OUTP:STAT?",
                            set_cmd="OUTP:STAT {}",
