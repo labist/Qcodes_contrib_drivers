@@ -36,7 +36,15 @@ class SpectrumArray(ParameterWithSetpoints):
         # :TRACe[:DATA]? need to test this live
         # i think we can access the visa resource with somethign like self.instrument.visa_handle
         visa_handle = self.instrument.visa_handle
-        data_str = visa_handle.query( ":TRACe:DATA?" )
+
+        # Disable continuous meausurement operation
+        visa_handle.write('INIT:CONT OFF')
+        visa_handle.write( 'TRAC:TYPE WRITE')
+        visa_handle.write( 'TRAC:UPD ON')
+        visa_handle.write( 'TRAC:DISP ON')
+        # Trigger a sweep, and wait for it to complete
+        visa_handle.query(':INIT; *OPC?' )
+        data_str = visa_handle.query( ':TRACe:DATA?' )
         return np.fromstring( data_str, sep=',' )
 
 class USB_SA124B(VisaInstrument):
