@@ -180,3 +180,8 @@ class USB_SA124B(VisaInstrument):
                 get_cmd=":SENSe:CHPower:WIDTH?",
                 set_cmd=":SENSe:CHPower:WIDTH {}",
                 get_parser=float )
+
+    def clear( self ) :
+        ''' clear the trace
+        '''
+        self.write( ':TRACe:CLEar' )
