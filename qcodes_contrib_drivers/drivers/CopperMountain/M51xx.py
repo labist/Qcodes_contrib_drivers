@@ -79,10 +79,10 @@ class FormattedSweep(CMTSweep):
         # Check if we should run a new sweep
         
         self.instrument.format( self.sweep_format )
-        self.instrument.write('TRIG:SEQ:SING') #Trigger a single sweep
-        self.instrument.write('TRIG:WAIT ENDM') #Trigger a single sweep
-        self.instrument.ask('*OPC?') #Wait for measurement to complete
-
+        if self.root_instrument.wait : # wait if desired
+            self.instrument.write('TRIG:SEQ:SING') #Trigger a single sweep
+            self.instrument.write('TRIG:WAIT ENDM') #Trigger a single sweep
+            self.instrument.ask('*OPC?') #Wait for measurement to complete
         cmd = f"CALC:DATA:FDAT?"
         S11 = self.instrument.ask(cmd) #Get data as string
 
@@ -398,10 +398,12 @@ class CMTBase(VisaInstrument):
                  # Set power ranges
                  min_power: Union[int, float], max_power: Union[int, float],
                  nports: int, # Number of ports on the CMT
+                 wait=False, # wait for scan to finish
                  **kwargs: Any) -> None:
         super().__init__(name, address, terminator='\n', **kwargs)
         self.min_freq = min_freq
         self.max_freq = max_freq
+        self.wait = wait
         # set the active trace to 1 since we can't figure out how to read it out
         self.select_trace_by_name( "tr1" )
 
@@ -498,7 +500,7 @@ class CMTBase(VisaInstrument):
                            get_parser=int,
                            set_cmd='SENS:SWE:POIN {}',
                            unit='',
-                           vals=Numbers(min_value=1, max_value=100001))
+                           vals=Numbers(min_value=1, max_value=200001))
 
         # Electrical delay
         self.add_parameter('electrical_delay',
