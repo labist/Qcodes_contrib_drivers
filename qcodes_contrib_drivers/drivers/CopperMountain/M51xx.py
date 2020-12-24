@@ -80,12 +80,14 @@ class FormattedSweep(CMTSweep):
         
         self.instrument.format( self.sweep_format )
         if self.root_instrument.wait : # wait if desired
+            self.instrument.write('TRIG:SOUR BUS')
             self.instrument.write('TRIG:SEQ:SING') #Trigger a single sweep
-            self.instrument.write('TRIG:WAIT ENDM') #Trigger a single sweep
             self.instrument.ask('*OPC?') #Wait for measurement to complete
         cmd = f"CALC:DATA:FDAT?"
         S11 = self.instrument.ask(cmd) #Get data as string
-
+        
+        if self.root_instrument.wait : #reset triggering to internal
+            self.instrument.write('TRIG:SOUR INT')
 
         #Chage the string values into numbers
         S11 = [float(s) for s in S11.split(',')]
@@ -398,12 +400,10 @@ class CMTBase(VisaInstrument):
                  # Set power ranges
                  min_power: Union[int, float], max_power: Union[int, float],
                  nports: int, # Number of ports on the CMT
-                 wait=False, # wait for scan to finish
                  **kwargs: Any) -> None:
         super().__init__(name, address, terminator='\n', **kwargs)
         self.min_freq = min_freq
         self.max_freq = max_freq
-        self.wait = wait
         # set the active trace to 1 since we can't figure out how to read it out
         self.select_trace_by_name( "tr1" )
 
@@ -417,6 +417,14 @@ class CMTBase(VisaInstrument):
         ports.lock()
         self.add_submodule("ports", ports)
 
+        # Wait for a fresh traces before acquiring?
+
+        self.add_parameter('wait',
+                            get_cmd=lambda: self._wait,
+                            set_cmd=lambda w : self._set_wait,
+                            initial_value=True,
+                            vals=Bool()
+                            )
         # Drive power
         self.add_parameter('power',
                            label='$P_{\mathrm{VNA}}$',
@@ -580,6 +588,12 @@ class CMTBase(VisaInstrument):
         self.write('FORM:BORD NORM')
 
         self.connect_message()
+
+    def _set_wait( self, w  ):
+        ''' set if we should wait for full trace to acquire.
+        this should only be set through the wait parameter
+        '''
+        self._wait = w
 
     @property
     def traces(self) -> ChannelList:
