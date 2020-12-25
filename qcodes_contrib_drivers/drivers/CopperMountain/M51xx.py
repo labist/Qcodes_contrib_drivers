@@ -79,14 +79,14 @@ class FormattedSweep(CMTSweep):
         # Check if we should run a new sweep
         
         self.instrument.format( self.sweep_format )
-        if self.root_instrument.wait : # wait if desired
+        if self.root_instrument.wait() : # wait if desired
             self.instrument.write('TRIG:SOUR BUS')
             self.instrument.write('TRIG:SEQ:SING') #Trigger a single sweep
             self.instrument.ask('*OPC?') #Wait for measurement to complete
         cmd = f"CALC:DATA:FDAT?"
         S11 = self.instrument.ask(cmd) #Get data as string
         
-        if self.root_instrument.wait : #reset triggering to internal
+        if self.root_instrument.wait() : #reset triggering to internal
             self.instrument.write('TRIG:SOUR INT')
 
         #Chage the string values into numbers
@@ -418,10 +418,10 @@ class CMTBase(VisaInstrument):
         self.add_submodule("ports", ports)
 
         # Wait for a fresh traces before acquiring?
-
+        self._wait = True
         self.add_parameter('wait',
                             get_cmd=lambda: self._wait,
-                            set_cmd=lambda w : self._set_wait,
+                            set_cmd=self._set_wait,
                             initial_value=True,
                             vals=Bool()
                             )
