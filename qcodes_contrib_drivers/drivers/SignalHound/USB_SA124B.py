@@ -35,11 +35,12 @@ class SpectrumArray(ParameterWithSetpoints):
     def get_raw(self):
         # :TRACe[:DATA]? need to test this live
         # i think we can access the visa resource with somethign like self.instrument.visa_handle
-        visa_handle = self.instrument.visa_handle
+        sa = self.instrument
+        visa_handle = sa.visa_handle
 
         # Disable continuous meausurement operation
-        visa_handle.write('INIT:CONT OFF')
-        visa_handle.write( 'TRAC:TYPE WRITE')
+        visa_handle.write('INIT:CONT OFF')   
+        # visa_handle.write( 'TRAC:TYPE WRIT')
         visa_handle.write( 'TRAC:UPD ON')
         visa_handle.write( 'TRAC:DISP ON')
         # Trigger a sweep, and wait for it to complete
