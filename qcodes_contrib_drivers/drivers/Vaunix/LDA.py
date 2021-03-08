@@ -29,7 +29,7 @@ from qcodes.utils.validators import Numbers
 logger = logging.getLogger(__name__)
 
 class Vaunix_LDA(Instrument):
-    dll_path = None
+    dll_path = r"C:\\Vaunix"
 
     def __init__(self, name: str,
                  serial_number: int,
