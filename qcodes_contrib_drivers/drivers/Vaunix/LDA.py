@@ -177,10 +177,68 @@ def _add_lda_parameters(inst: Union[Vaunix_LDA, LdaChannel]) -> None:
         inst: the instrument or channel to add the parameters to.
     """
     root_instrument = cast(Vaunix_LDA, inst.root_instrument)
+    dll = root_instrument.dll
     inst.add_parameter("attenuation",
                        parameter_class=LdaAttenuation,
                        set_parser=float,
                        )
+                       
+    inst.add_parameter("ramp_start",
+                        parameter_class=LdaParameter,
+                        dll_get_function=dll.fnLDA_GetRampStartHR,
+                        dll_set_function=dll.fnLDA_SetRampStartHR,
+                        scaling=0.05 )
+
+    inst.add_parameter("ramp_end",
+                        parameter_class=LdaParameter,
+                        dll_get_function=dll.fnLDA_GetRampEndHR,
+                        dll_set_function=dll.fnLDA_SetRampEndHR,
+                        scaling=0.05 )
+
+    inst.add_parameter("ramp_step",
+                        parameter_class=LdaParameter,
+                        dll_get_function=dll.fnLDA_GetAttenuationStepHR,
+                        dll_set_function=dll.fnLDA_SetAttenuationStepHR,
+                        scaling=0.05 )
+
+    inst.add_parameter("dwell_time",
+                    parameter_class=LdaParameter,
+                    dll_get_function=dll.fnLDA_GetDwellTime,
+                    dll_set_function=dll.fnLDA_SetDwellTime,
+                    scaling=1e-3 )
+
+    inst.add_parameter("hold_time",
+                    parameter_class=LdaParameter,
+                    dll_get_function=dll.fnLDA_GetHoldTime,
+                    dll_set_function=dll.fnLDA_SetHoldTime,
+                    scaling=1e-3 )
+
+    inst.add_parameter("ramp_bidirectional",
+                    parameter_class=LdaParameter,
+                    dll_get_function=lambda : -1,
+                    dll_set_function=dll.fnLDA_SetRampBidirectional,
+                    scaling=1,
+                    snapshot_exclude=True
+                )
+
+    inst.add_parameter("ramp_repeat",
+                    parameter_class=LdaParameter,
+                    dll_get_function=lambda : -1,
+                    dll_set_function=dll.fnLDA_SetRampMode,
+                    scaling=1,
+                    snapshot_exclude=True
+                )
+    
+    inst.add_parameter("ramp",
+                parameter_class=LdaParameter,
+                dll_get_function=lambda : -1,
+                dll_set_function=dll.fnLDA_StartRamp,
+                scaling=1,
+                snapshot_exclude=True
+            )
+    # lda.dll.fnLDA_SetRampMode( lda.reference, True ) # repeat ramp
+    # lda.dll.fnLDA_StartRamp(lda.reference, False ) 
+
     wf_vals = LdaWorkingFrequency.get_validator(root_instrument)
     if wf_vals:
         inst.add_parameter("working_frequency",
@@ -190,11 +248,11 @@ def _add_lda_parameters(inst: Union[Vaunix_LDA, LdaChannel]) -> None:
 
 
 class LdaParameter(Parameter):
-    scaling = 1.0  # Scaling from integers from API to physical quantities
 
     def __init__(self, name: str,
                  instrument: Union[Vaunix_LDA, LdaChannel],
                  dll_get_function: Callable, dll_set_function: Callable,
+                 scaling : Numbers = 1.0,
                  **kwargs):
         """
         Parameter associated with one channel of the LDA.
@@ -209,6 +267,7 @@ class LdaParameter(Parameter):
         self._reference = instrument.root_instrument.reference
         self._dll_get_function = partial(dll_get_function, self._reference)
         self._dll_set_function = partial(dll_set_function, self._reference)
+        if scaling is not None : self.scaling = scaling
 
     def _switch_channel(self) -> None:
         """
@@ -235,7 +294,7 @@ class LdaParameter(Parameter):
         Switch to this channel and set to ``value`` .
         """
         self._switch_channel()
-        value = round(value / self.scaling)
+        value = int( round(value / self.scaling) ) # needed for 0.0
         error_msg = self._dll_set_function(value)
         if error_msg != 0:
             raise RuntimeError(f'{self._dll_set_function.func.__name__} '
@@ -264,7 +323,8 @@ class LdaAttenuation(LdaParameter):
                          vals=vals,
                          unit="dB",
                          label="Attenuation",
-                         **kwargs,
+                         scaling=self.scaling,
+                         **kwargs
                          )
 
 
@@ -292,6 +352,7 @@ class LdaWorkingFrequency(LdaParameter):
                          label="Working frequency",
                          docstring="Frequency at which the "
                                    "attenuation is most accurate.",
+                         scaling = self.scaling,
                          **kwargs
                          )
 
