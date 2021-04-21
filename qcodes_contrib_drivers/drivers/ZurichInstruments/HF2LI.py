@@ -165,13 +165,34 @@ class HF2LI(Instrument):
             )
 
         #### Parameters for sweeping
-        self._sweeper_samplecount = 3
+        sweeper = self.daq.sweep()
+        sweeper.set("device", self.dev_id)
+        ### different ones?!
+        sweeper.set("gridnode", f"oscs/{0}/freq") ### Set the sweeping parameter
+        self.sweeper = sweeper
 
+        self._sweeper_samplecount = 3
         self.add_parameter( 'sweeper_samplecount',
                 unit='',
                 label= 'Points',
                 get_cmd= lambda : self._sweeper_samplecount,
                 set_cmd = lambda p : setattr( self, '_sweeper_samplecount', p )
+            )
+
+        self._sweeper_start = 100
+        self.add_parameter( 'sweeper_start',
+                unit='Hz',
+                label= 'Start frequency',
+                get_cmd= lambda : self._sweeper_start,
+                set_cmd = lambda p : setattr( self, '_sweeper_start', p )
+            )
+
+        self._sweeper_stop = 1000
+        self.add_parameter( 'sweeper_stop',
+                unit='Hz',
+                label= 'Stop frequency',
+                get_cmd= lambda : self._sweeper_stop,
+                set_cmd = lambda p : setattr( self, '_sweeper_stop', p )
             )
 
         self.add_parameter( 'trace_frequency',
@@ -246,13 +267,12 @@ class HF2LI(Instrument):
         return theta
 
     def trigger_sweep(self):
-        start, stop = 100, 1000
         sweeper = self.daq.sweep()
         sweeper.set("device", self.dev_id)
         ### different ones?!
         sweeper.set("gridnode", f"oscs/{0}/freq") ### Set the sweeping parameter
-        sweeper.set("start", start)
-        sweeper.set("stop", stop)
+        sweeper.set("start", self.sweeper_start() )
+        sweeper.set("stop", self.sweeper_stop() )
         sweeper.set('samplecount', self.sweeper_samplecount() )
         sweeper.set("xmapping", 1) ### Logarithmic sweep
         sweeper.set('scan', 0) ### Sequenctial sweep
@@ -263,7 +283,7 @@ class HF2LI(Instrument):
         # ### Number of averaging for each sweep point
         # sweeper.set('averaging/sample', 20)
         path = f"/{self.dev_id}/demods/{self.demod}/sample"
-        
+
         sweeper.subscribe(path)
         ### Start measurement
         sweeper.execute()
