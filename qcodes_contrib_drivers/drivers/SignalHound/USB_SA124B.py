@@ -46,6 +46,7 @@ class SpectrumArray(ParameterWithSetpoints):
         # Trigger a sweep, and wait for it to complete
         visa_handle.query(':INIT; *OPC?' )
         data_str = visa_handle.query( ':TRACe:DATA?' )
+        visa_handle.write('INIT:CONT ON')   
         return np.fromstring( data_str, sep=',' )
 
 class USB_SA124B(VisaInstrument):

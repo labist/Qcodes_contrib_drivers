@@ -4,7 +4,7 @@ import numpy as np
 import qcodes as qc
 import os
 import qcodes_contrib_drivers.drivers.labbrick.lowlevel.lms as lms
-from qcodes_contrib_drivers.drivers.labbrick.lowlevel.lms import default_library_location, download_lms_binaries
+from qcodes_contrib_drivers.drivers.labbrick.lowlevel.lms import default_library_location
 from qcodes_contrib_drivers.drivers.labbrick.lowlevel.lms import VNXError
 
 api = lms.VNX_LSG_API.default()
@@ -19,7 +19,7 @@ class LbB(Instrument):
     def are_u_there(cls):
     # Check for DLL, if not there download
         if not lms.default_library_location():
-            lms.download_lms_binaries()        
+            print("Driver not found, consider installing from Vaunix website")      
     
     @classmethod
     def fint_stuffs(cls):

@@ -11,56 +11,11 @@ from typing import List, Dict
 
 from qcodes_contrib_drivers.drivers.labbrick.lowlevel import VNXError
 
-__all__ = ['download_lsg_binaries', 'VNX_LSG_API', 'LSGStatus']
+__all__ = ['VNX_LSG_API', 'LSGStatus']
 
 
 def default_library_location():
-    return os.path.join(os.path.dirname(os.path.realpath(__file__)), 'vnx_fmsynth')
-
-
-def download_lms_binaries(target_path=None):
-    if target_path is None:
-        target_path = os.path.dirname(default_library_location())
-
-    if os.name != 'nt' or platform.architecture()[0] != '64bit':
-        raise RuntimeError('Only implemented for Windows x64 :(\n'
-                           'For linux you have to compile LMShid.c to get the binary')
-
-    zip_url = 'https://vaunix.com/resources/vnx-api-lms-1-13-20.zip'
-
-    with tempfile.TemporaryDirectory() as temp_dir:
-        main_zip_file = os.path.join(temp_dir, 'vnx-lms-api.zip')
-
-        logging.getLogger('vaunix_api').info('Downloading LMS API')
-        urllib.request.urlretrieve(zip_url, main_zip_file)
-
-        logging.getLogger('vaunix_api').info('Unzipping LMS API')
-        with zipfile.ZipFile(main_zip_file, 'r') as main_zip:
-            for file_name in main_zip.namelist():
-                if '64 SDK' in file_name:
-                    sdk_file = file_name
-                    break
-            else:
-                raise RuntimeError('64bit SDK not found', main_zip.namelist())
-
-            main_zip.extract(sdk_file, temp_dir)
-
-        logging.getLogger('vaunix_api').info('Unzipping LSG SDK')
-        with zipfile.ZipFile(os.path.join(temp_dir, sdk_file)) as sdk_zip:
-            for file_name in sdk_zip.namelist():
-                if file_name.endswith('vnx_fmsynth.dll'):
-                    dll_file = file_name
-                    break
-            else:
-                raise RuntimeError('DLL not found', sdk_zip.namelist())
-
-            sdk_zip.extract(dll_file, temp_dir)
-
-            extracted_dll_location = os.path.join(temp_dir, dll_file)
-
-        logging.getLogger('vaunix_api').info('Moving to target location')
-        shutil.move(extracted_dll_location, target_path)
-
+    return r"C:\Vaunix\vnx_fmsynth"
 
 class LSGStatus:
     """Helper class for inspecting answer of get_device_status"""

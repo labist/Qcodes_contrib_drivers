@@ -40,8 +40,8 @@ class CMTSweep(ArrayParameter):
         # if its in zero span, return duration of sweep
 
         vna = self._instrument.root_instrument
-        if vna.span() == 0 :
-            raise ValueError( 'In zero span mode. use magnitude_time or phase_time parameters' )
+        # if vna.span() == 0 :
+            # raise ValueError( 'In zero span mode. use magnitude_time or phase_time parameters' )
         start = vna.start()
         stop = vna.stop()
         return (np.linspace(start, stop, self.shape[0]),)
@@ -268,6 +268,7 @@ class CMTTrace(InstrumentChannel):
                            get_parser=float,
                            set_cmd='CALC1:TRAC1:MARK:Y {}',
                            unit='dB')
+                           
         self.add_parameter('marker_x',
                            label='$f_{\mathrm{marker}}$',
                            get_cmd='CALC1:MARK:X?',
