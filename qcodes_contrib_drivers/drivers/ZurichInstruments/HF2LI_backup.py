@@ -3,19 +3,10 @@ import numpy as np
 import logging
 log = logging.getLogger(__name__)
 
-import time
-import matplotlib.pyplot as plt
-import numpy as np
-
 import zhinst.utils
 import qcodes as qc
 from qcodes.instrument.base import Instrument
 import qcodes.utils.validators as vals
-
-from qcodes.instrument.parameter import ParameterWithSetpoints, Parameter
-
-from qcodes.dataset.measurements import Measurement, res_type, DataSaver
-from qcodes.instrument.specialized_parameters import ElapsedTimeParameter
 
 class HF2LI(Instrument):
     """Qcodes driver for Zurich Instruments HF2LI lockin amplifier.
@@ -42,13 +33,13 @@ class HF2LI(Instrument):
     def __init__(self, name: str, device: str, demod: int, sigout: int,
         auxouts: Dict[str, int], num_sigout_mixer_channels: int=1, **kwargs) -> None:
         super().__init__(name, **kwargs)
-        instr = zhinst.utils.create_api_session(device, 1, required_devtype='HF2LI') #initializes the instrument
+        instr = zhinst.utils.create_api_session(device, 1, required_devtype='HF2LI')
         self.daq, self.dev_id, self.props = instr
         self.demod = demod
         self.sigout = sigout
         self.auxouts = auxouts
         log.info(f'Successfully connected to {name}.')
-        
+
         for ch in self.auxouts:
             self.add_parameter(
                 name=ch,
@@ -132,65 +123,6 @@ class HF2LI(Instrument):
             vals=vals.Numbers(-1, 1),
             docstring='Multiply by sigout_range to get actual offset voltage.'
         )
-
-        self.add_parameter(
-                name=f'demod{self.demod}_x',
-                label=f'Demodulated x'+ str(self.demod),
-                unit='V',
-                get_cmd=self._get_x,
-                set_cmd=None
-            )     
-
-        self.add_parameter(
-                name=f'demod{self.demod}_y',
-                label=f'Demodulated y'+ str(self.demod),
-                unit='V',
-                get_cmd= self._get_y,
-                get_parser=float
-            )   
-        self.add_parameter(
-                name=f'demod{self.demod}_r',
-                label=f'Demodulated r'+ str(self.demod),
-                unit='V',
-                get_cmd= self._get_r,
-                get_parser=float
-            )     
-
-        self.add_parameter(
-                name=f'demod{self.demod}_theta',
-                label=f'Demodulated theta'+ str(self.demod),
-                unit='deg',
-                get_cmd= self._get_theta,
-                get_parser=float
-            )
-
-        #### Parameters for sweeping
-        self._sweeper_samplecount = 3
-
-        self.add_parameter( 'sweeper_samplecount',
-                unit='',
-                label= 'Points',
-                get_cmd= lambda : self._sweeper_samplecount,
-                set_cmd = lambda p : setattr( self, '_sweeper_samplecount', p )
-            )
-
-        self.add_parameter( 'trace_frequency',
-                unit='Hz',
-                label= 'Frequency',
-                get_cmd= lambda : self._get_sweep_param( 'frequency' ),
-                vals=vals.Arrays(shape=(self.sweeper_samplecount,))
-            )
-  
-        for p in ( 'r', 'x', 'y' ) :
-            self.add_parameter( f'trace_{p}',
-                    unit='V',
-                    label= p,
-                    parameter_class = ParameterWithSetpoints,
-                    setpoints = ( self.trace_frequency,),
-                    get_cmd= lambda : self._get_sweep_param( p ),
-                    vals=vals.Arrays(shape=(self.sweeper_samplecount,))
-                )
-  
         for i in range(num_sigout_mixer_channels):
             self.add_parameter(
                 name=f'sigout_enable{i}',
@@ -216,108 +148,6 @@ class HF2LI(Instrument):
                 vals=vals.Numbers(-1, 1),
                 docstring='Multiply by sigout_range to get actual output voltage.'
             )
-    
-    def _sweeper_get( self, name ) :
-        """ wrap zi sweeper.get
-        """
-        print( name )
-        return self.sweeper.get( name )[name][0]
-
-    def _get_x(self):
-        path = f'/{self.dev_id}/demods/{self.demod}/sample/'
-        return self.daq.getSample(path)['x'][0]
-    def _get_y(self):
-        path = f'/{self.dev_id}/demods/{self.demod}/sample/'
-        return self.daq.getSample(path)['y']
-
-    def _get_r(self):
-        path = f'/{self.dev_id}/demods/{self.demod}/sample/'
-        r = self.daq.getSample(path)['r']
-        return r
-
-    def _get_sweep_param(self, param):
-        self.trigger_sweep()
-        params = self.samples[param]
-        return params
-
-    def _get_theta(self):
-        path = f'/{self.dev_id}/demods/{self.demod}/sample/'
-        theta = np.arctan(self.daq.getSample(path)['y']/self.daq.getSample(path)['x'])*180/np.pi
-        return theta
-
-    def trigger_sweep(self):
-        start, stop = 100, 1000
-        sweeper = self.daq.sweep()
-        sweeper.set("device", self.dev_id)
-        ### different ones?!
-        sweeper.set("gridnode", f"oscs/{0}/freq") ### Set the sweeping parameter
-        sweeper.set("start", start)
-        sweeper.set("stop", stop)
-        sweeper.set('samplecount', self.sweeper_samplecount() )
-        sweeper.set("xmapping", 1) ### Logarithmic sweep
-        sweeper.set('scan', 0) ### Sequenctial sweep
-        sweeper.set("bandwidthcontrol", 2) ### Bandwidth control: Auto
-        sweeper.set('maxbandwidth', 100) ### Max demodulation bandwidth
-        sweeper.set('bandwidthoverlap', 0) ### No bandwidth overlap
-
-        # ### Number of averaging for each sweep point
-        # sweeper.set('averaging/sample', 20)
-        path = f"/{self.dev_id}/demods/{self.demod}/sample"
-        
-        sweeper.subscribe(path)
-        ### Start measurement
-        sweeper.execute()
-
-        ### Wait until measurement is done 
-        start_t = time.time()
-        timeout = 60  # [s]
-        print("Will measure", self.sweeper_samplecount.get_latest(), "sweep pointss...")
-        while not sweeper.finished():  # Wait until the sweep is complete, with timeout.
-            time.sleep(1)
-            progress = sweeper.progress()
-            print(f"Sweep progress: {progress[0]:.2%}.", end="\n")
-            if (time.time() - start_t) > timeout:
-                print("\nSweep still not finished, forcing finish...")
-                sweeper.finish()
-        print("")
-        data = sweeper.read(True)  
-        self.samples = data[path][0][0]
-        sweeper.unsubscribe(path) ### Unsubscribe from the signal path
-        sweeper.finish() ### Finish the nodule
-        sweeper.clear() ### Delete the module
-        #frequency = samples['frequency']
-        #amplitude = samples['r']
-        #phase = samples['phase']
-    
-
-
-
-
-
-
-
-    def _get_data(self, poll_length=0.1) -> float:
-        path = f'/{self.dev_id}/demods/{self.demod}/sample'
-        self.daq.unsubscribe("*")
-        poll_timeout = 500  # [ms]
-        poll_flags = 0
-        poll_return_flat_dict = True
-        self.daq.sync()
-        self.daq.subscribe(path)
-        data = self.daq.poll(poll_length, poll_timeout, poll_flags, poll_return_flat_dict)
-        self.daq.unsubscribe("*")
-        return data
-
-    def readout(self):
-        path = f'/{self.dev_id}/demods/{self.demod}/sample'
-        data = self._get_data()
-        sample = data[path]
-        X = sample['x']
-        Y = sample['y']
-        clockbase = float(self.daq.getInt(f'/{self.dev_id}/clockbase'))
-        t = (sample['timestamp'] - sample['timestamp'][0]) / clockbase 
-        return (X, Y, t)
-
 
     def _get_phase(self) -> float:
         path = f'/{self.dev_id}/demods/{self.demod}/phaseshift/'
@@ -328,7 +158,7 @@ class HF2LI(Instrument):
         self.daq.setDouble(path, phase)
         
     def _get_gain(self, channel: str) -> float:
-        path = f'/{self.dev_id}/auxouts/{self.auxouts[channel]}/scale/'
+        path = f'/{self.devid}/auxouts/{self.auxouts[channel]}/scale/'
         return self.daq.getDouble(path)
 
     def _set_gain(self, gain: float, channel: str) -> None:
