@@ -112,6 +112,7 @@ class HF2LI(Instrument):
             label='Frequency',
             unit='Hz',
             get_cmd=self._get_frequency,
+            set_cmd=self._set_frequency,
             get_parser=float
         ) 
         self.add_parameter(
@@ -135,8 +136,7 @@ class HF2LI(Instrument):
         )
 
         single_values = (('x', 'Demodulated x', 'V'),
-                    ('y', 'Demodulated y', 'V'),
-                    ('r', 'Demodulated r', 'V') )
+                    ('y', 'Demodulated y', 'V') )
 
         for name, unit, label in single_values :
             self.add_parameter( f'demod{self.demod}_{name}',
@@ -156,8 +156,9 @@ class HF2LI(Instrument):
         sweeper = self.daq.sweep()
         sweeper.set("device", self.dev_id)
         ### different ones?!
-        sweeper.set("gridnode", f"oscs/{0}/freq") ### Set the sweeping parameter
+        sweeper.set("gridnode", f"oscs/{self.sigout}/freq") ### Set the sweeping parameter
         self.sweeper = sweeper
+        # do an initial trigger for snapshot
 
         sweeper_params = ( ( 'samplecount', '', 'Points' ),
                 ( 'start', 'Hz', 'Start frequency' ),
@@ -176,20 +177,23 @@ class HF2LI(Instrument):
         self.add_parameter( 'trace_frequency',
                 unit='Hz',
                 label= 'Frequency',
-                get_cmd= lambda : self.samples['frequency'],
+                snapshot_value=False,
+                get_cmd= lambda : self.sweeper_samples['frequency'],
                 vals=vals.Arrays(shape=(self.sweeper_samplecount,))
             )
+
         self.add_parameter( 'averaging',
                 unit='npts',
                 label= 'Averaging',
                 set_cmd = partial( self.sweeper.set, 'averaging/sample' ),
-                    get_cmd = partial( self._sweeper_get, 'averaging/sample' ))  
+                get_cmd = partial( self._sweeper_get, 'averaging/sample' )
+            )  
   
         self.auto_trigger = False 
 
-        for p in ( 'r', 'x', 'y' ) :
+        for p, units in ( ('r', 'dB'), ('x','dB'), ('y','dB'),('phase', 'rad') ) :
             self.add_parameter( f'trace_{p}',
-                    unit='V',
+                    unit= units,
                     label= p,
                     parameter_class = ParameterWithSetpoints,
                     setpoints = ( self.trace_frequency,),
@@ -197,7 +201,7 @@ class HF2LI(Instrument):
                     vals=vals.Arrays(shape=(self.sweeper_samplecount,))
                 )
   
-        for i in range(num_sigout_mixer_channels):
+        for i in range(6, num_sigout_mixer_channels):
             self.add_parameter(
                 name=f'sigout_enable{i}',
                 label=f'Signal output mixer {i} enable',
@@ -236,8 +240,15 @@ class HF2LI(Instrument):
     def _get_sweep_param(self, param, fr=True):
         if self.auto_trigger :
             self.trigger_sweep()
-        params = self.samples[param]
-        return params
+
+        if param is 'phase' :
+            values = self.sweeper_samples[param]
+        else :
+            # detect which node we are sweeping with
+            amplitude = self._get_sigout_amplitude(self.sigout+6) / ( 2 * np.sqrt(2) ) # normalization factor for vpp 2x fudge
+            values = 20 * np.log10( self.sweeper_samples[param]/amplitude )
+
+        return values
 
     def _get_theta(self):
         path = f'/{self.dev_id}/demods/{self.demod}/sample/'
@@ -246,11 +257,15 @@ class HF2LI(Instrument):
 
     def trigger_sweep(self):
         sweeper = self.daq.sweep()
-        sweeper = self.sweeper
+        #sweeper = self.sweeper
         sweeper.set('scan', 0) ### Sequenctial sweep
         sweeper.set("bandwidthcontrol", 2) ### Bandwidth control: Auto
         sweeper.set('maxbandwidth', 100) ### Max demodulation bandwidth
         path = f"/{self.dev_id}/demods/{self.demod}/sample"
+        sweeper.set("start", self.sweeper_start())
+        sweeper.set("stop", self.sweeper_stop())
+        sweeper.set("samplecount", self.sweeper_samplecount())
+        #sweeper.set()
         sweeper.subscribe(path)
         sweeper.execute()
 
@@ -264,8 +279,8 @@ class HF2LI(Instrument):
                 print("\nSweep still not finished, forcing finish...")
                 sweeper.finish()
         print("")
-        data = sweeper.read(True)  
-        self.samples = data[path][0][0]
+        data = sweeper.read(True)
+        self.sweeper_samples = data[path][0][0]
         sweeper.unsubscribe(path) ### Unsubscribe from the signal path
 
 
@@ -379,6 +394,10 @@ class HF2LI(Instrument):
     def _get_frequency(self) -> float:
         path = f'/{self.dev_id}/demods/{self.demod}/freq/'
         return self.daq.getDouble(path)
+
+    def _set_frequency(self, freq) -> float:
+        osc_index = 0
+        return self.daq.set([["/%s/oscs/%d/freq" % (self.dev_id, osc_index), freq]])
 
     def sample(self) -> dict:
         path = f'/{self.dev_id}/demods/{self.demod}/sample/'
