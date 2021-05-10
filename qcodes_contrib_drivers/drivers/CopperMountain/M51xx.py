@@ -79,15 +79,14 @@ class FormattedSweep(CMTSweep):
         # Check if we should run a new sweep
         
         self.instrument.format( self.sweep_format )
-        if self.root_instrument.wait() : # wait if desired
-            self.instrument.write('TRIG:SOUR BUS')
-            self.instrument.write('TRIG:SEQ:SING') #Trigger a single sweep
-            self.instrument.ask('*OPC?') #Wait for measurement to complete
+        if self.root_instrument.auto_sweep() : # wait if desired
+            self.root_instrument.trigger_trace()
+
         cmd = f"CALC:DATA:FDAT?"
         S11 = self.instrument.ask(cmd) #Get data as string
         
-        if self.root_instrument.wait() : #reset triggering to internal
-            self.instrument.write('TRIG:SOUR INT')
+        if self.root_instrument.auto_sweep() : #reset triggering to internal
+            self.root_instrument.trigger_internal()
 
         #Chage the string values into numbers
         S11 = [float(s) for s in S11.split(',')]
@@ -418,14 +417,6 @@ class CMTBase(VisaInstrument):
         ports.lock()
         self.add_submodule("ports", ports)
 
-        # Wait for a fresh traces before acquiring?
-        self._wait = True
-        self.add_parameter('wait',
-                            get_cmd=lambda: self._wait,
-                            set_cmd=self._set_wait,
-                            initial_value=True,
-                            vals=Bool()
-                            )
         # Drive power
         self.add_parameter('power',
                            label='$P_{\mathrm{VNA}}$',
@@ -631,6 +622,18 @@ class CMTBase(VisaInstrument):
         # Query the instrument for what options are installed
         return self.ask('*OPT?').strip('"').split(',')
 
+    def trigger_trace( self ) :
+        ''' trigger a single trace and wait for it to be finished
+        '''
+        self.write('TRIG:SOUR BUS')
+        self.write('TRIG:SEQ:SING') #Trigger a single sweep
+        self.ask('*OPC?') #Wait for measurement to complete
+
+    def trigger_internal( self ) :
+        ''' go back to internal triggering
+        '''
+        self.write('TRIG:SOUR INT')
+        
     def get_trace_catalog(self):
         """
         Get the trace catalog, that is a list of trace and sweep types
