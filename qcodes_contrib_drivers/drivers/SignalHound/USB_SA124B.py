@@ -115,6 +115,16 @@ class USB_SA124B(VisaInstrument):
                         get_cmd=":TRACe:AVERage:COUNt?",
                         set_cmd=":TRACe:AVERage:COUNt {:d}",
                         get_parser=int )
+        
+        self.add_parameter('ref_lvl',
+                        label='Reference power',
+                        unit='dBm',
+                        initial_value=0,
+                        get_cmd=":SENSe:POWer:RLEVel?",
+                        set_cmd=":SENSe:POWer:RLEVel {:f}",
+                        get_parser=int
+
+        )
 
         self.add_parameter('type',
                         unit='',
