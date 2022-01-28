@@ -21,12 +21,12 @@ from qcodes.utils.validators import Numbers, Arrays, Enum
 
 class GeneratedSetPoints(Parameter):
     """
-    A parameter that generates a setpoint array from start, increment, and n_points
+    A parameter that generates a setpoint array from start, stop, and n_points
 
-                               parameter_class=GeneratedSetPoints,
-                           startparam=self.x_start,
-                           incparam=self.x_inc,
-                           xpointsparam=self.x_points,
+                           parameter_class=GeneratedSetPoints,
+                           startparam=self.f_start,
+                           stopparam=self.f_stop,
+                           xpointsparam=self.n_points,
     """
     def __init__(self, startparam, stopparam, xpointsparam, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -63,7 +63,7 @@ class R550_wrapper(Instrument):
         super().__init__(name, **kwargs)
 
         self.dut = WSA()
-        self.dut.connect(address[8:22])
+        self.dut.connect(address)
         self.dut.request_read_perm()
         self.RBW = 100e3
         self.average = 1

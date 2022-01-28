@@ -1,0 +1,52 @@
+#####################################################################
+## This example makes use of capture_spectrum() of util.py to
+## perform a single block capture of desire RBW and plot the
+## computed spectral data within the usuable frequency range
+##
+## See thinkrf.py for other data capture functions, especially if
+## raw data capture (with context info output) is preferred
+#####################################################################
+#%%
+# import required libraries
+import matplotlib.pyplot as plt
+import numpy as np
+from pyrf.devices.thinkrf import WSA
+from pyrf.util import capture_spectrum
+
+# Constants for configuration
+RFE_MODE = 'SH'
+CENTER_FREQ = 5.12e9
+SPP = 16384
+PPB = 1
+RBW = 5e3 / (SPP * PPB)  # 125 MHz is the sampling rate
+AVERAGE = 10
+DECIMATION = 1 # no decimation
+ATTENUATION = 0
+GAIN = 'HIGH'
+TRIGGER_SETTING = {'type': 'NONE',
+                'fstart': (CENTER_FREQ - 2e6), # some value
+                'fstop': (CENTER_FREQ + 2e6),  # some value
+                'amplitude': -100}
+
+
+# initialize an RTSA (aka WSA) device handle
+dut = WSA()
+
+dut.connect('169.254.16.253')
+
+# initialize RTSA configurations
+dut.reset()
+dut.request_read_perm()
+dut.rfe_mode(RFE_MODE)
+dut.freq(CENTER_FREQ)
+dut.attenuator(ATTENUATION)
+dut.psfm_gain(GAIN)
+dut.trigger(TRIGGER_SETTING)
+
+fstart, fstop, pow_data = capture_spectrum(dut, RBW, AVERAGE, DECIMATION)
+freq_range = np.linspace(fstart , fstop, len(pow_data))
+
+plt.plot( freq_range, pow_data )
+
+#%%
+(fstop - fstart )/1e6
