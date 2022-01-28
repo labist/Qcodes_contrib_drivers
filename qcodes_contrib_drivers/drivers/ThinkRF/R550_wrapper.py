@@ -61,7 +61,8 @@ class R550_wrapper(Instrument):
                  address: str,
                  **kwargs: Any) -> None:
         super().__init__(name, **kwargs)
-
+        
+        self.dut.reset()
         self.dut = WSA()
         self.dut.connect(address)
         self.dut.request_read_perm()
@@ -69,6 +70,25 @@ class R550_wrapper(Instrument):
         self.average = 1
         self.decimation = 1
 
+        self._freqstart = 5e9
+        self._freqstop = 6e9
+ 
+
+        self.add_parameter('attenuation',
+                                unit = 'dB',
+                                label = 'attenuation',
+                                get_cmd = self.dut.attenuator,
+                                set_cmd = self.dut.attenuator,
+                                get_parser = float,
+                          )
+
+        self.add_parameter('gain',
+                                unit = '',
+                                label = 'gain',
+                                get_cmd = self.dut.psfm_gain,
+                                set_cmd = self.dut.psfm_gain,
+                                get_parser = float
+                          )
         
         self.add_parameter('f_center',
                             unit = 'Hz',
@@ -96,12 +116,12 @@ class R550_wrapper(Instrument):
                             )
 
         self.add_parameter('f_start',
-                            #initial_value=fstart,
+                            initial_value= 5.1e9,
                             unit='Hz',
                             label='f start',
                             #vals=Numbers(0,1e3),
                             get_cmd= self.get_fstart,
-                            set_cmd=None,
+                            set_cmd=self.set_fstart,
                             get_parser = float)
 
         self.add_parameter('f_stop',
@@ -163,8 +183,10 @@ class R550_wrapper(Instrument):
             return len(spectra_data)
 
     def get_fstart(self):
-            fstart, fstop, spectra_data = capture_spectrum(self.dut,self.RBW)
-            return fstart
+            return self._fstart
+
+    def set_fstart(self, f):
+            self._fstart = f
 
     def get_fstop(self):
             fstart, fstop, spectra_data = capture_spectrum(self.dut,self.RBW)

@@ -67,3 +67,7 @@ stop = time.time()
 plt.plot( freq_range, pow_data )
 
 print( f"{stop - start:e} seconds" )
+
+#%%
+keep = (  5.115e9 <  freq_range ) & ( freq_range < 5.125e9 )
+plt.plot( freq_range[keep], pow_data[keep] )
