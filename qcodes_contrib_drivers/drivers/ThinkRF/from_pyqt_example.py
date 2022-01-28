@@ -12,20 +12,36 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pyrf.devices.thinkrf import WSA
 from pyrf.util import capture_spectrum
+import time
 
-# Constants for configuration
+# # Constants for configuration
+# RFE_MODE = 'SH'
+# CENTER_FREQ = 5.12e9
+# SPP = 16384
+# PPB = 1
+# RBW = 5e3 / (SPP * PPB)  # 125 MHz is the sampling rate
+# AVERAGE = 10
+# DECIMATION = 1 # no decimation
+# ATTENUATION = 0
+# GAIN = 'HIGH'
+# TRIGGER_SETTING = {'type': 'NONE',
+#                 'fstart': (CENTER_FREQ - 2e6), # some value
+#                 'fstop': (CENTER_FREQ + 2e6),  # some value
+#                 'amplitude': -100}
+
+
 RFE_MODE = 'SH'
 CENTER_FREQ = 5.12e9
-SPP = 16384
+SPP = 32*512
 PPB = 1
-RBW = 5e3 / (SPP * PPB)  # 125 MHz is the sampling rate
-AVERAGE = 10
+RBW = 125e6 / (SPP * PPB)  # 125 MHz is the sampling rate
+AVERAGE = 1000
 DECIMATION = 1 # no decimation
 ATTENUATION = 0
 GAIN = 'HIGH'
 TRIGGER_SETTING = {'type': 'NONE',
-                'fstart': (CENTER_FREQ - 2e6), # some value
-                'fstop': (CENTER_FREQ + 2e6),  # some value
+                'fstart': (CENTER_FREQ - 1e6), # some value
+                'fstop': (CENTER_FREQ + 1e6),  # some value
                 'amplitude': -100}
 
 
@@ -43,10 +59,11 @@ dut.attenuator(ATTENUATION)
 dut.psfm_gain(GAIN)
 dut.trigger(TRIGGER_SETTING)
 
+
+start = time.time()
 fstart, fstop, pow_data = capture_spectrum(dut, RBW, AVERAGE, DECIMATION)
 freq_range = np.linspace(fstart , fstop, len(pow_data))
-
+stop = time.time()
 plt.plot( freq_range, pow_data )
 
-#%%
-(fstop - fstart )/1e6
+print( f"{stop - start:e} seconds" )
