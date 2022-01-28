@@ -26,7 +26,7 @@ class RohdeSchwarzHMC804xChannel(InstrumentChannel):
                                select_cmd),
                            get_parser=float,
                            unit='A',
-                           vals=vals.Numbers(0.5e-3, self._parent.max_current)
+                           vals=vals.Numbers(0.e-3, self._parent.max_current)
                            )
         self.add_parameter('state',
                            label='Output enabled',
