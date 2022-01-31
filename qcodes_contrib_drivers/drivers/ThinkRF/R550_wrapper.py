@@ -45,8 +45,8 @@ class SpectrumArray(ParameterWithSetpoints):
     def get_raw(self):
        
         dut = self.root_instrument.dut
-        RBW = self.root_instrument.RBW
-        average = self.root_instrument.average
+        RBW = self.root_instrument._RBW
+        average = self.root_instrument._average
         decimation = self.root_instrument.decimation
 
         fstart, fstop, spectra_data = capture_spectrum( dut,RBW,average,decimation)
@@ -66,14 +66,25 @@ class R550_wrapper(Instrument):
         self.dut = WSA()
         self.dut.connect(address)
         self.dut.request_read_perm()
-        self.RBW = 100e3
-        self.average = 1
-        self.decimation = 1
+
 
         self._freqstart = 5e9
         self._freqstop = 6e9
- 
+        self._span = 5e6
 
+        self._RBW = 100e3
+        self._average = 1
+        self._decimation = 1
+        self.rfe_mode('SH')
+        
+        self.add_parameter('rfe_mode',
+                            unit = '',
+                            label = 'Input Mode',
+                            get_cmd = self.dut.rfe_mode,
+                            set_cmd = self.dut.rfe_mode,
+                            get_parser = str
+                            )
+        
         self.add_parameter('attenuation',
                                 unit = 'dB',
                                 label = 'attenuation',
@@ -87,9 +98,42 @@ class R550_wrapper(Instrument):
                                 label = 'gain',
                                 get_cmd = self.dut.psfm_gain,
                                 set_cmd = self.dut.psfm_gain,
-                                get_parser = float
+                                get_parser = str
                           )
         
+        self.add_parameter('average',
+                                unit = '',
+                                label = 'average',
+                                get_cmd = self.get_avg,
+                                set_cmd = self.set_avg,
+                                get_parser = float
+                          )
+
+        self.add_parameter('ppb',
+                                unit = '',
+                                label = 'packets/block',
+                                get_cmd = self.dut.ppb,
+                                set_cmd = self.dut.ppb,
+                                get_parser = float,
+                          )
+
+        self.add_parameter('spp',
+                                unit = '',
+                                label = 'samples/packet',
+                                get_cmd = self.dut.spp,
+                                set_cmd = self.dut.spp,
+                                get_parser = float,
+                          )
+
+        self.add_parameter('span',
+                            unit = 'Hz',
+                            label = 'span',
+                           # vals = Numbers(0,100e6),
+                            get_cmd = lambda : ,
+                            set_cmd = self.set_bw ,
+                            get_parser = float
+                            )
+
         self.add_parameter('f_center',
                             unit = 'Hz',
                             label = 'f center',
@@ -97,23 +141,6 @@ class R550_wrapper(Instrument):
                             get_cmd = self.dut.freq,
                             set_cmd = self.dut.freq,
                             get_parser = float)
-
-        self.add_parameter('rfe_mode',
-                            unit = '',
-                            label = 'Input Mode',
-                            get_cmd = self.dut.rfe_mode,
-                            set_cmd = self.dut.rfe_mode,
-                            get_parser = str
-                            )
-
-        self.add_parameter('span',
-                            unit = 'Hz',
-                            label = 'span',
-                           # vals = Numbers(0,100e6),
-                            get_cmd = lambda : self.f_stop() - self.f_start(),
-                            set_cmd = self.set_bw ,
-                            get_parser = float
-                            )
 
         self.add_parameter('f_start',
                             initial_value= 5.1e9,
@@ -130,7 +157,7 @@ class R550_wrapper(Instrument):
                             #initial_value=fstop,
                             #vals=Numbers(1,1e3),
                             get_cmd = self.get_fstop,
-                            set_cmd=None,
+                            set_cmd= self.get_fstop,
                             get_parser = float)
 
         self.add_parameter('n_points',
@@ -156,8 +183,8 @@ class R550_wrapper(Instrument):
                             label='Noise power',
                             parameter_class=SpectrumArray,
                             dut = self.dut,
-                            RBW = self.RBW,
-                            average = self.average,
+                            RBW = self._RBW,
+                            average = self._average,
                             decimation = self.decimation,
                             vals=Arrays(shape=(self.n_points.get_latest,)))
 
@@ -173,13 +200,13 @@ class R550_wrapper(Instrument):
             self.dut.properties.USABLE_BW[self.rfe_mode()]= bw
 
             spanChangeFactor = correctedBW/prevSpan 
-            self.RBW = self.RBW * spanChangeFactor ## correction to resolution so that number of points stays the same
+            self._RBW = self._RBW * spanChangeFactor ## correction to resolution so that number of points stays the same
     
     def set_npoints(self,n):
-            self.RBW = 0.81 * self.span()/n ## approximate correction to compensate for usable bins calculation
+            self._RBW = 0.81 * self.span()/n ## approximate correction to compensate for usable bins calculation
 
     def get_npoints(self):
-            fstart, fstop, spectra_data = capture_spectrum(self.dut,self.RBW)
+            fstart, fstop, spectra_data = capture_spectrum(self.dut,self._RBW)
             return len(spectra_data)
 
     def get_fstart(self):
@@ -189,5 +216,19 @@ class R550_wrapper(Instrument):
             self._fstart = f
 
     def get_fstop(self):
-            fstart, fstop, spectra_data = capture_spectrum(self.dut,self.RBW)
-            return fstop
+            return self._fstop
+
+    def set_fstop(self, f):
+            self._fstop = f
+
+    def get_avg(self):
+            return self._average
+
+    def set_avg(self, avg):
+            self._average = avg
+
+    def get_span(self):
+            return self._span
+
+    def set_span(self, bw):
+            self._span = bw
