@@ -30,12 +30,12 @@ import time
 #                 'amplitude': -100}
 
 
-RFE_MODE = 'SH'
-CENTER_FREQ = 5.12e9
+RFE_MODE = 'ZIF' ## originally, SH (super-heterodyne), changed so we don't get a frequency offset
+CENTER_FREQ = 5277700000.0
 SPP = 32*512
 PPB = 1
 RBW = 125e6 / (SPP * PPB)  # 125 MHz is the sampling rate
-AVERAGE = 1000
+AVERAGE = 100
 DECIMATION = 1 # no decimation
 ATTENUATION = 0
 GAIN = 'HIGH'
@@ -69,5 +69,9 @@ plt.plot( freq_range, pow_data )
 print( f"{stop - start:e} seconds" )
 
 #%%
-keep = (  5.115e9 <  freq_range ) & ( freq_range < 5.125e9 )
+span = 15e6
+fbegin = CENTER_FREQ - span/2
+fend = CENTER_FREQ + span/2
+keep = (  fbegin <  freq_range ) & ( freq_range < fend )
 plt.plot( freq_range[keep], pow_data[keep] )
+# %%

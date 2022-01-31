@@ -38,7 +38,9 @@ class GeneratedSetPoints(Parameter):
         start = self._startparam()
         stop = self._stopparam()
         npts = self._xpointsparam()
+       
         return np.linspace( start, stop, npts )
+        
 
 class SpectrumArray(ParameterWithSetpoints):
     
@@ -85,7 +87,7 @@ class R550_wrapper(Instrument):
         
         self.add_parameter('rfe_mode',
                                 unit = '',
-                                initial_value= 'SH',
+                                initial_value= 'ZIF',
                                 label = 'Input Mode',
                                 get_cmd = self.dut.rfe_mode,
                                 set_cmd = self.dut.rfe_mode,
