@@ -45,13 +45,18 @@ class SpectrumArray(ParameterWithSetpoints):
     def get_raw(self):
        
         dut = self.root_instrument.dut
-        RBW = self.root_instrument._RBW
-        average = self.root_instrument._average
-        decimation = self.root_instrument.decimation
+        RBW = self.root_instrument.RBW()
+        average = self.root_instrument.average()
+        decimation = self.root_instrument._decimation
+        npoints = self.root_instrument.n_points()
 
-        fstart, fstop, spectra_data = capture_spectrum( dut,RBW,average,decimation)
+       # fstart, fstop, spectra = capture_spectrum( dut,RBW,average,decimation)
 
-        return spectra_data
+     #   flist = np.linspace(fstart,fstop,len(spectra))
+      #  __, filteredSpectra = self.root_instrument.filter_span(flist,spectra)
+
+
+        return self.root_instrument._spectra
 
 
 class R550_wrapper(Instrument):
@@ -62,164 +67,163 @@ class R550_wrapper(Instrument):
                  **kwargs: Any) -> None:
         super().__init__(name, **kwargs)
         
-        self.dut.reset()
         self.dut = WSA()
         self.dut.connect(address)
+        self.dut.reset()
         self.dut.request_read_perm()
 
 
-        self._freqstart = 5e9
-        self._freqstop = 6e9
         self._span = 5e6
 
-        self._RBW = 100e3
+        self._RBW = 125e6/(32*512)
         self._average = 1
         self._decimation = 1
-        self.rfe_mode('SH')
+
+        self._freqlist = []
+        self._spectralist = []
+        
         
         self.add_parameter('rfe_mode',
-                            unit = '',
-                            label = 'Input Mode',
-                            get_cmd = self.dut.rfe_mode,
-                            set_cmd = self.dut.rfe_mode,
-                            get_parser = str
-                            )
+                                unit = '',
+                                initial_value= 'SH',
+                                label = 'Input Mode',
+                                get_cmd = self.dut.rfe_mode,
+                                set_cmd = self.dut.rfe_mode,
+                                get_parser = str)
         
         self.add_parameter('attenuation',
                                 unit = 'dB',
                                 label = 'attenuation',
                                 get_cmd = self.dut.attenuator,
                                 set_cmd = self.dut.attenuator,
-                                get_parser = float,
-                          )
+                                get_parser = float,)
 
         self.add_parameter('gain',
                                 unit = '',
                                 label = 'gain',
                                 get_cmd = self.dut.psfm_gain,
                                 set_cmd = self.dut.psfm_gain,
-                                get_parser = str
-                          )
+                                get_parser = str)
         
         self.add_parameter('average',
                                 unit = '',
                                 label = 'average',
                                 get_cmd = self.get_avg,
                                 set_cmd = self.set_avg,
-                                get_parser = float
-                          )
+                                get_parser = int)
 
         self.add_parameter('ppb',
                                 unit = '',
+                                #initial_value = 1,
                                 label = 'packets/block',
                                 get_cmd = self.dut.ppb,
                                 set_cmd = self.dut.ppb,
-                                get_parser = float,
-                          )
+                                get_parser = int,)
 
         self.add_parameter('spp',
                                 unit = '',
+                                #initial_value = 32 * 512,
                                 label = 'samples/packet',
                                 get_cmd = self.dut.spp,
                                 set_cmd = self.dut.spp,
-                                get_parser = float,
-                          )
+                                get_parser = int,)
 
         self.add_parameter('span',
-                            unit = 'Hz',
-                            label = 'span',
-                           # vals = Numbers(0,100e6),
-                            get_cmd = lambda : ,
-                            set_cmd = self.set_bw ,
-                            get_parser = float
-                            )
+                                unit = 'Hz',
+                                label = 'span',
+                                # vals = Numbers(0,100e6),
+                                get_cmd = self.get_span,
+                                set_cmd = self.set_span ,
+                                get_parser = float)
+
+        self.add_parameter('RBW',
+                                unit = 'Hz',
+                               # initial_value= 125e6 / (self.spp() * self.ppb),
+                                label = 'resolution bancwidth',
+                                # vals = Numbers(0,100e6),
+                                get_cmd = self.get_RBW,
+                                set_cmd = self.set_RBW ,
+                                get_parser = float)
 
         self.add_parameter('f_center',
-                            unit = 'Hz',
-                            label = 'f center',
-                            vals = Numbers(0.1e9,27e9),
-                            get_cmd = self.dut.freq,
-                            set_cmd = self.dut.freq,
-                            get_parser = float)
+                                unit = 'Hz',
+                                label = 'f center',
+                                vals = Numbers(0.1e9,27e9),
+                                get_cmd = self.dut.freq,
+                                set_cmd = self.dut.freq,
+                                get_parser = float)
 
         self.add_parameter('f_start',
-                            initial_value= 5.1e9,
-                            unit='Hz',
-                            label='f start',
-                            #vals=Numbers(0,1e3),
-                            get_cmd= self.get_fstart,
-                            set_cmd=self.set_fstart,
-                            get_parser = float)
+                              #  initial_value= 5.1e9,
+                                unit='Hz',
+                                label='f start',
+                                #vals=Numbers(0,1e3),
+                                get_cmd= lambda: self.f_center() - self.span()/2,
+                                set_cmd= '',
+                                get_parser = float)
 
         self.add_parameter('f_stop',
-                            unit='Hz',
-                            label='f stop',
-                            #initial_value=fstop,
-                            #vals=Numbers(1,1e3),
-                            get_cmd = self.get_fstop,
-                            set_cmd= self.get_fstop,
-                            get_parser = float)
+                                unit='Hz',
+                                label='f stop',
+                                #initial_value=fstop,
+                                #vals=Numbers(1,1e3),
+                                get_cmd = lambda: self.f_center() + self.span()/2,
+                                set_cmd= '',
+                                get_parser = float)
 
         self.add_parameter('n_points',
-                            unit='',
-                          # initial_value=len(spectra_data),
-                            #vals=Numbers(1,1e3),
-                            get_cmd= self.get_npoints,
-                            set_cmd=self.set_npoints,
-                            get_parser = float)
+                                unit='',
+                                # initial_value=len(spectra_data),
+                                #vals=Numbers(1,1e3),
+                                get_cmd= self.get_npoints,
+                                set_cmd= '',
+                                get_parser = int)
         
         self.add_parameter('freq_axis',
-                            unit='Hz',
-                            label='Freq',
-                            parameter_class=GeneratedSetPoints,
-                            startparam=self.f_start,
-                            stopparam=self.f_stop,
-                            xpointsparam=self.n_points,
-                            vals=Arrays(shape=(self.n_points.get_latest,)))
+                                unit='Hz',
+                                label='Freq',
+                                parameter_class=GeneratedSetPoints,
+                                startparam=self.f_start,
+                                stopparam=self.f_stop,
+                                xpointsparam=self.n_points,
+                                vals=Arrays(shape=(self.n_points.get_latest,)))
 
         self.add_parameter('spectrum',
-                            unit='dBm',
-                            setpoints=(self.freq_axis,),
-                            label='Noise power',
-                            parameter_class=SpectrumArray,
-                            dut = self.dut,
-                            RBW = self._RBW,
-                            average = self._average,
-                            decimation = self.decimation,
-                            vals=Arrays(shape=(self.n_points.get_latest,)))
+                                unit='dBm',
+                                setpoints=(self.freq_axis,),
+                                label='Noise power',
+                                parameter_class=SpectrumArray,
+                                dut = self.dut,
+                                RBW = self.RBW,
+                                average = self.average,
+                                decimation = self._decimation,
+                                vals=Arrays(shape=(self.n_points.get_latest,)))
 
-    def set_bw(self,bw):
-            '''
-            function to set the bandwidth
+    ## helper functions
+    def filter_span(self,fullFreq,fullSpectra):
+            
+            freqfilter = (  self.f_start() <  fullFreq ) & ( fullFreq < self.f_stop() )
+            spectra = fullSpectra[freqfilter]
+            freq = fullFreq[freqfilter]
 
-                bw : bandwidth in Hz, float
-            '''
-            correctedBW = 1.25*bw ## correction so that the value set here is the usable bandwidth
-            prevSpan = self.dut.properties.FULL_BW[self.rfe_mode()] 
-            self.dut.properties.FULL_BW[self.rfe_mode()] = correctedBW
-            self.dut.properties.USABLE_BW[self.rfe_mode()]= bw
+            self._freqlist = freq
+            self._spectra = spectra
 
-            spanChangeFactor = correctedBW/prevSpan 
-            self._RBW = self._RBW * spanChangeFactor ## correction to resolution so that number of points stays the same
+            return freq,spectra
     
-    def set_npoints(self,n):
-            self._RBW = 0.81 * self.span()/n ## approximate correction to compensate for usable bins calculation
-
+    ## setters and getters (maybe there's a way of avoiding these?)
     def get_npoints(self):
-            fstart, fstop, spectra_data = capture_spectrum(self.dut,self._RBW)
-            return len(spectra_data)
+            
+            fstart, fstop, spectra = capture_spectrum(self.dut,self.RBW(),self.average())
 
-    def get_fstart(self):
-            return self._fstart
+            flist = np.linspace(fstart,fstop,len(spectra))
 
-    def set_fstart(self, f):
-            self._fstart = f
+            filteredFreq,filteredSpectra = self.filter_span(flist,spectra)
+            
+            return len(filteredSpectra)
 
-    def get_fstop(self):
-            return self._fstop
-
-    def set_fstop(self, f):
-            self._fstop = f
+#     def set_npoints(self,n):
+#             self._RBW = 0.81 * self._span()/n ## approximate correction to compensate for usable bins calculation
 
     def get_avg(self):
             return self._average
@@ -232,3 +236,9 @@ class R550_wrapper(Instrument):
 
     def set_span(self, bw):
             self._span = bw
+
+    def get_RBW(self):
+            return self._RBW
+
+    def set_RBW(self, rbw):
+            self._RBW = rbw
