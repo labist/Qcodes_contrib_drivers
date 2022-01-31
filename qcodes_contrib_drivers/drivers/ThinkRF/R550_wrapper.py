@@ -87,7 +87,7 @@ class R550_wrapper(Instrument):
         
         self.add_parameter('rfe_mode',
                                 unit = '',
-                                initial_value= 'ZIF',
+                                initial_value= 'SH',
                                 label = 'Input Mode',
                                 get_cmd = self.dut.rfe_mode,
                                 set_cmd = self.dut.rfe_mode,
