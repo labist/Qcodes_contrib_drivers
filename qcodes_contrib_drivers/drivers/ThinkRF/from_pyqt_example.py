@@ -30,7 +30,7 @@ import time
 #                 'amplitude': -100}
 
 
-RFE_MODE = 'SH' ## originally, SH (super-heterodyne), changed so we don't get a frequency offset
+RFE_MODE = 'SH' 
 CENTER_FREQ = 5277700000.0
 SPP = 32*512
 PPB = 1
@@ -43,7 +43,7 @@ TRIGGER_SETTING = {'type': 'NONE',
                 'fstart': (CENTER_FREQ - 1e6), # some value
                 'fstop': (CENTER_FREQ + 1e6),  # some value
                 'amplitude': -100}
-
+REFLEVEL = None
 
 # initialize an RTSA (aka WSA) device handle
 dut = WSA()

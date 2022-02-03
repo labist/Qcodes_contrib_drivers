@@ -80,6 +80,7 @@ class R550_wrapper(Instrument):
         self._RBW = 125e6/(32*512)
         self._average = 1
         self._decimation = 1
+        self._reflevel = 0
 
         self._freqlist = []
         self._spectralist = []
@@ -95,6 +96,7 @@ class R550_wrapper(Instrument):
         
         self.add_parameter('attenuation',
                                 unit = 'dB',
+                                initial_value = 0.0,
                                 label = 'attenuation',
                                 get_cmd = self.dut.attenuator,
                                 set_cmd = self.dut.attenuator,
@@ -106,6 +108,13 @@ class R550_wrapper(Instrument):
                                 get_cmd = self.dut.psfm_gain,
                                 set_cmd = self.dut.psfm_gain,
                                 get_parser = str)
+
+        self.add_parameter('reflevel',
+                                unit = 'dBm',
+                                label = 'reference level',
+                                get_cmd = self.get_ref,
+                                set_cmd = self.set_ref,
+                                get_parser = float)
         
         self.add_parameter('average',
                                 unit = '',
@@ -244,3 +253,9 @@ class R550_wrapper(Instrument):
 
     def set_RBW(self, rbw):
             self._RBW = rbw
+
+    def get_ref(self):
+            return self._reflevel
+
+    def set_ref(self, ref):
+            self._reflevel = ref
