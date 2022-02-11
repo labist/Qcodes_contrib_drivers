@@ -124,14 +124,26 @@ class HF2LI(Instrument):
             set_cmd=self._set_sigout_range,
             vals=vals.Enum(0.01, 0.1, 1, 10)
         )
+
         self.add_parameter(
             name='sigout_offset',
             label='Signal output offset',
             unit='V',
-            get_cmd=self._get_sigout_offset,
-            get_parser=float,
+            snapshot_value=True,
             set_cmd=self._set_sigout_offset,
+            get_cmd=self._get_sigout_offset,
             vals=vals.Numbers(-1, 1),
+            docstring='Multiply by sigout_range to get actual offset voltage.'
+        )
+
+        self.add_parameter(
+            name='sigout_dc_offset',
+            label='Signal output DC offset',
+            unit='V',
+            snapshot_value=True,
+            set_cmd=self._set_dc_offset,
+            get_cmd=self._get_dc_offset,
+            vals=vals.Numbers(-10, 10),
             docstring='Multiply by sigout_range to get actual offset voltage.'
         )
 
@@ -151,7 +163,24 @@ class HF2LI(Instrument):
                 get_cmd= self._get_theta,
                 get_parser=float
             )
+        
+        self.add_parameter(
+                name=f'timeconstant',
+                label=f'time constant',
+                unit='s',
+                get_cmd= self._get_time_constant,
+                set_cmd= self._set_time_constant,
+                get_parser=float
+            )
+        
+        #### Parameters for Spectrum
 
+
+        self.daq.sync()
+        zoomfft = self.daq.zoomFFT()
+        zoomfft.set("device", self.dev_id)
+        self.daq_module = self.daq.dataAcquisitionModule()
+        self.zoomfft = zoomfft
         #### Parameters for sweeping
         sweeper = self.daq.sweep()
         sweeper.set("device", self.dev_id)
@@ -178,7 +207,7 @@ class HF2LI(Instrument):
                 unit='Hz',
                 label= 'Frequency',
                 snapshot_value=False,
-                get_cmd= lambda : self.sweeper_samples['frequency'],
+                get_cmd= lambda : self.samples['frequency'],
                 vals=vals.Arrays(shape=(self.sweeper_samplecount,))
             )
 
@@ -191,7 +220,7 @@ class HF2LI(Instrument):
   
         self.auto_trigger = False 
 
-        for p, units in ( ('r', 'dB'), ('x','dB'), ('y','dB'),('phase', 'rad') ) :
+        for p, units in ( ('r', 'dB'), ('x','dB'), ('y','dB'),('phase', 'deg') ) :
             self.add_parameter( f'trace_{p}',
                     unit= units,
                     label= p,
@@ -200,7 +229,35 @@ class HF2LI(Instrument):
                     get_cmd= partial(self._get_sweep_param, p ),
                     vals=vals.Arrays(shape=(self.sweeper_samplecount,))
                 )
-  
+
+        self.add_parameter('spectrum_length',
+                unit='pts',
+                label='spectrum length',
+                snapshot_value=False,
+                set_cmd = partial(self.sweeper.set, 'sample_count')) #zoomfft.set("bit"))
+
+        self.add_parameter( 'spectrum_frequency',
+                unit='Hz',
+                label= 'Frequency',
+                snapshot_value=False,
+                get_cmd= lambda : self.spectrum_samples[0][0]["grid"],
+                vals=vals.Arrays(shape=(self._spectrum_freq_length,))
+            )
+        self.add_parameter( 'spectrum_span',
+                unit='Hz',
+                label= 'Averaging',
+                set_cmd = partial(self.daq_module.set, 'spectrum/frequencyspan' ,'spectrum_span' ),
+                get_cmd = partial( self._spectrum_get, 'spectrum/frequencyspan' )
+            ) 
+        for p, units in ( ('filter', 'dB'), ('r', 'dB')):
+            self.add_parameter( p,
+                    unit= units,
+                    label= p,
+                    parameter_class = ParameterWithSetpoints,
+                    setpoints = ( self.spectrum_frequency,),
+                    get_cmd= partial(self._get_spectrum, p ),
+                    vals=vals.Arrays(shape=(self._spectrum_freq_length,))
+            )
         for i in range(6, num_sigout_mixer_channels):
             self.add_parameter(
                 name=f'sigout_enable{i}',
@@ -226,28 +283,55 @@ class HF2LI(Instrument):
                 vals=vals.Numbers(-1, 1),
                 docstring='Multiply by sigout_range to get actual output voltage.'
             )
+
+    def _spectrum_freq_length(self):
+        #return self.daq_module.get('grid/cols')['grid']['cols'][0]-1
+        return len(self.spectrum_samples[0][0]["grid"])
     
+    def _get_time_constant(self):
+        path = f'/{self.dev_id}/demods/{self.demod}/timeconstant/'
+        return self.daq.getDouble(path)
+    def _set_time_constant(self, timeconstant):
+        path = f'/{self.dev_id}/demods/{self.demod}/timeconstant/'
+        return self.daq.setDouble(path, timeconstant)
+
     def _sweeper_get( self, name ) :
         """ wrap zi sweeper.get
         """
         return self.sweeper.get( name )[name][0]
+    def _spectrum_get( self, name ) :
+        """ wrap zi sweeper.get
+        """
+        return self.zoomfft.get( name )[name][0]
 
     def _single_get(self, name):
         path = f'/{self.dev_id}/demods/{self.demod}/sample/'
         return self.daq.getSample(path)[name][0]
-
+    
 
     def _get_sweep_param(self, param, fr=True):
         if self.auto_trigger :
             self.trigger_sweep()
 
         if param is 'phase' :
-            values = self.sweeper_samples[param]
+            values = (self.samples[param])*180/np.pi
         else :
             # detect which node we are sweeping with
             amplitude = self._get_sigout_amplitude(self.sigout+6) / ( 2 * np.sqrt(2) ) # normalization factor for vpp 2x fudge
-            values = 20 * np.log10( self.sweeper_samples[param]/amplitude )
+            values = 20 * np.log10( self.samples[param]/amplitude )
 
+        return values
+
+    def _get_spectrum(self, param, fr=True):
+        if self.auto_trigger :
+            self.trigger_spectrum()
+
+        amplitude = self._get_sigout_amplitude(self.sigout+6) / ( 2 * np.sqrt(2) ) # normalization factor for vpp 2x fudge
+        if param=='filter':
+            values = 20 * np.log10( (self.spectrum_samples[0][0]['r']/self.spectrum_samples[0][0][param]) * np.sqrt(2) / amplitude)
+        else:
+            values = 20 * np.log10( self.spectrum_samples[0][0][param]/amplitude )
+    
         return values
 
     def _get_theta(self):
@@ -257,33 +341,66 @@ class HF2LI(Instrument):
 
     def trigger_sweep(self):
         sweeper = self.daq.sweep()
+        #self.snapshot(update=True)
         #sweeper = self.sweeper
         sweeper.set('scan', 0) ### Sequenctial sweep
-        sweeper.set("bandwidthcontrol", 2) ### Bandwidth control: Auto
-        sweeper.set('maxbandwidth', 100) ### Max demodulation bandwidth
+        sweeper.set("bandwidthcontrol", 0) ### Bandwidth control: Auto
+        #sweeper.set('maxbandwidth', 100) ### Max demodulation bandwidth
+        sweeper.set('settling/inaccuracy', 1.0e-08)
         path = f"/{self.dev_id}/demods/{self.demod}/sample"
         sweeper.set("start", self.sweeper_start())
         sweeper.set("stop", self.sweeper_stop())
-        sweeper.set("samplecount", self.sweeper_samplecount())
+        sweeper.set("samplecount", self.sweeper_samplecount()) 
         #sweeper.set()
+        self.timeconstant(self.timeconstant())
         sweeper.subscribe(path)
         sweeper.execute()
 
         ### Wait until measurement is done 
         start_t = time.time()
-        timeout = 60  # [s]
+        timeout = 6000  # [s]
         while not sweeper.finished():  # Wait until the sweep is complete, with timeout.
             time.sleep(1)
             progress = sweeper.progress()
             if (time.time() - start_t) > timeout:
                 print("\nSweep still not finished, forcing finish...")
                 sweeper.finish()
-        print("")
         data = sweeper.read(True)
-        self.sweeper_samples = data[path][0][0]
+        self.samples = data[path][0][0]
         sweeper.unsubscribe(path) ### Unsubscribe from the signal path
 
+    def trigger_spectrum(self):
+            zoomfft = self.zoomfft
+            #self.snapshot(update=True)
+            zoomfft.set("mode", 0)
+            zoomfft.set("overlap", 0)
+            # 0=Rectangular, 1=Hann, 2=Hamming, 3=Blackman Harris,
+            # 16=Exponential, 17=Cosine, 18=Cosine squared.
+            zoomfft.set("window", 1)
+            zoomfft.set("absolute", 1) # Return absolute frequencies instead of relative to 0.
+            zoomfft.set("bit", 10) # The number of lines is 2**bits.
+            loopcount = 1 # The number of zoomFFT's to perform.
+            zoomfft.set("loopcount", loopcount)
+            self.daq_module.set('grid/repetitions', 50)
+            path = "/%s/demods/%d/sample" % (self.dev_id, self.demod)
+            zoomfft.subscribe(path)
+            zoomfft.execute()
 
+            start = time.time()
+            timeout = 60  # [s]
+            print("Will perform", loopcount, "zoomFFTs.")
+            while not zoomfft.finished():
+                time.sleep(0.2)
+                progress = zoomfft.progress()
+                if (time.time() - start) > timeout:
+                    print("\nzoomFFT still not finished, forcing finish...")
+                    zoomfft.finish()
+            print("")
+
+            return_flat_data_dict = True
+            data = zoomfft.read(return_flat_data_dict)
+            zoomfft.unsubscribe(path)
+            self.spectrum_samples = data[path]
 
     def _get_data(self, poll_length=0.1) -> float:
         path = f'/{self.dev_id}/demods/{self.demod}/sample'
@@ -362,6 +479,24 @@ class HF2LI(Instrument):
     def _set_sigout_range(self, rng: float) -> None:
         path = f'/{self.dev_id}/sigouts/{self.sigout}/range/'
         self.daq.setDouble(path, rng)
+    
+    def _set_dc_range(self, rng: float) -> None:
+        path = f'/dev1792/sigouts/1/range/'
+        self.daq.setDouble(path, rng)
+
+    def _get_dc_range(self) -> float:
+        path = f'/dev1792/sigouts/1/range/'
+        return self.daq.getDouble(path)
+    
+    def _get_dc_offset(self) -> float:
+        path = f'/dev1792/sigouts/1/offset/'
+        range = self._get_dc_range()
+        return self.daq.getDouble(path)*range
+
+    def _set_dc_offset(self, offset: float) -> None:
+        path = f'/dev1792/sigouts/1/offset/'
+        range = self._get_dc_range()
+        return self.daq.setDouble(path, offset/range)
 
     def _get_sigout_offset(self) -> float:
         path = f'/{self.dev_id}/sigouts/{self.sigout}/offset/'
@@ -403,48 +538,3 @@ class HF2LI(Instrument):
         path = f'/{self.dev_id}/demods/{self.demod}/sample/'
         return self.daq.getSample(path)
         
-""" 
-    def trigger_sweep(self):
-        sweeper = self.daq.sweep()
-        # sweeper.set("device", self.dev_id)
-        # ### different ones?!
-        # sweeper.set("gridnode", f"oscs/{0}/freq") ### Set the sweeping parameter
-        sweeper = self.sweeper
-        # sweeper.set("start", self.sweeper_start() )
-        # sweeper.set("stop", self.sweeper_stop() )
-        # sweeper.set('samplecount', self.sweeper_samplecount() )
-        # sweeper.set("xmapping", 1) ### Logarithmic sweep
-        sweeper.set('scan', 0) ### Sequenctial sweep
-        sweeper.set("bandwidthcontrol", 2) ### Bandwidth control: Auto
-        sweeper.set('maxbandwidth', 100) ### Max demodulation bandwidth
-        #sweeper.set('bandwidthoverlap', 0) ### No bandwidth overlap
-
-        # ### Number of averaging for each sweep point
-        # sweeper.set('averaging/sample', 20)
-        path = f"/{self.dev_id}/demods/{self.demod}/sample"
-
-        sweeper.subscribe(path)
-        ### Start measurement
-        sweeper.execute()
-
-        ### Wait until measurement is done 
-        start_t = time.time()
-        timeout = 60  # [s]
-        #print("Will measure", self.sweeper_samplecount.get_latest(), "sweep pointss...")
-        while not sweeper.finished():  # Wait until the sweep is complete, with timeout.
-            time.sleep(1)
-            progress = sweeper.progress()
-            #print(f"Sweep progress: {progress[0]:.2%}.", end="\n")
-            if (time.time() - start_t) > timeout:
-                print("\nSweep still not finished, forcing finish...")
-                sweeper.finish()
-        print("")
-        data = sweeper.read(True)  
-        self.samples = data[path][0][0]
-        sweeper.unsubscribe(path) ### Unsubscribe from the signal path
-        # sweeper.finish() ### Finish the nodule
-        # sweeper.clear() ### Delete the module
-        #frequency = samples['frequency']
-        #amplitude = samples['r']
-        #phase = samples['phase']
- """
