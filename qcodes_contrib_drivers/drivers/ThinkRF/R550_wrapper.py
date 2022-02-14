@@ -46,17 +46,17 @@ class SpectrumArray(ParameterWithSetpoints):
     
     def get_raw(self):
        
-        dut = self.root_instrument.dut
-        RBW = self.root_instrument.RBW()
-        average = self.root_instrument.average()
-        decimation = self.root_instrument._decimation
-        npoints = self.root_instrument.n_points()
+        # dut = self.root_instrument.dut
+        # RBW = self.root_instrument.rbw()
+        # average = self.root_instrument.average()
+        # decimation = self.root_instrument._decimation
 
        # fstart, fstop, spectra = capture_spectrum( dut,RBW,average,decimation)
 
      #   flist = np.linspace(fstart,fstop,len(spectra))
       #  __, filteredSpectra = self.root_instrument.filter_span(flist,spectra)
 
+        npoints = self.root_instrument.n_points() # n_points captures scpectrum
 
         return self.root_instrument._spectra
 
@@ -147,7 +147,7 @@ class R550_wrapper(Instrument):
                                 set_cmd = self.set_span ,
                                 get_parser = float)
 
-        self.add_parameter('RBW',
+        self.add_parameter('rbw',
                                 unit = 'Hz',
                                # initial_value= 125e6 / (self.spp() * self.ppb),
                                 label = 'resolution bancwidth',
@@ -205,7 +205,7 @@ class R550_wrapper(Instrument):
                                 label='Noise power',
                                 parameter_class=SpectrumArray,
                                 dut = self.dut,
-                                RBW = self.RBW,
+                                RBW = self.rbw,
                                 average = self.average,
                                 decimation = self._decimation,
                                 vals=Arrays(shape=(self.n_points.get_latest,)))
@@ -225,7 +225,7 @@ class R550_wrapper(Instrument):
     ## setters and getters (maybe there's a way of avoiding these?)
     def get_npoints(self):
             
-            fstart, fstop, spectra = capture_spectrum(self.dut,self.RBW(),self.average())
+            fstart, fstop, spectra = capture_spectrum(self.dut,self.rbw(),self.average())
 
             flist = np.linspace(fstart,fstop,len(spectra))
 

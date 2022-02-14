@@ -31,7 +31,7 @@ import time
 
 
 RFE_MODE = 'SH' 
-CENTER_FREQ = 5277700000.0
+CENTER_FREQ = 5888e6 #5.881e9 # - 100e6
 SPP = 32*512
 PPB = 1
 RBW = 125e6 / (SPP * PPB)  # 125 MHz is the sampling rate
@@ -68,9 +68,12 @@ plt.plot( freq_range, pow_data )
 
 print( f"{stop - start:e} seconds" )
 #%%
-span = 15e6
+span = 40e6
 fbegin = CENTER_FREQ - span/2
 fend = CENTER_FREQ + span/2
 keep = (  fbegin <  freq_range ) & ( freq_range < fend )
 plt.plot( freq_range[keep], pow_data[keep] )
+ax = plt.gca()
+ax.set_xlabel('f (Hz)')
+ax.set_ylabel('Power (dBm)')
 # %%
