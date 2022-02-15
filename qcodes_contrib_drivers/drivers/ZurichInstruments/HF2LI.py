@@ -43,7 +43,8 @@ class HF2LI(Instrument):
     def __init__(self, name: str, device: str, demod: int, sigout: int,
         auxouts: Dict[str, int], num_sigout_mixer_channels: int=1, **kwargs) -> None:
         super().__init__(name, **kwargs)
-        instr = zhinst.utils.create_api_session(device, 1, required_devtype='HF2LI') #initializes the instrument
+        instr = zhinst.utils.create_api_session(device, 1 )#, 
+            #required_devtype='HF2LI') #initializes the instrument
         self.daq, self.dev_id, self.props = instr
         self.demod = demod
         self.sigout = sigout
@@ -151,30 +152,36 @@ class HF2LI(Instrument):
                     ('y', 'Demodulated y', 'V') )
 
         for name, unit, label in single_values :
-            self.add_parameter( f'demod{self.demod}_{name}',
+            self.add_parameter( f'demod_{name}',
                     unit=unit,
                     label=label,
                     get_cmd = partial( self._single_get, name )
             )
+
         self.add_parameter(
-                name=f'demod{self.demod}_theta',
+                name=f'demod_theta',
                 label=f'Demodulated theta'+ str(self.demod),
                 unit='deg',
                 get_cmd= self._get_theta,
                 get_parser=float
             )
         
-        self.add_parameter(
-                name=f'timeconstant',
-                label=f'time constant',
-                unit='s',
-                get_cmd= self._get_time_constant,
-                set_cmd= self._set_time_constant,
-                get_parser=float
-            )
+        demod_params = ( 
+            ('timeconstant', 's'),
+            ('order', ''),
+            ('rate', '')
+        )
+        for param, unit in demod_params :
+            self.add_parameter(
+                    name=param,
+                    label=param,
+                    unit=unit,
+                    get_cmd= partial( self._get_demod_param, param ),
+                    set_cmd= partial( self._set_demod_param, param ),
+                    get_parser=float
+                )
         
         #### Parameters for Spectrum
-
 
         self.daq.sync()
         zoomfft = self.daq.zoomFFT()
@@ -211,11 +218,12 @@ class HF2LI(Instrument):
                 vals=vals.Arrays(shape=(self.sweeper_samplecount,))
             )
 
-        self.add_parameter( 'averaging',
+        self._averages=1
+        self.add_parameter( 'averages',
                 unit='npts',
                 label= 'Averaging',
-                set_cmd = partial( self.sweeper.set, 'averaging/sample' ),
-                get_cmd = partial( self._sweeper_get, 'averaging/sample' )
+                set_cmd = partial( setattr, self, '_averages' ),
+                get_cmd = partial( getattr, self, '_averages' )
             )  
   
         self.auto_trigger = False 
@@ -230,12 +238,6 @@ class HF2LI(Instrument):
                     vals=vals.Arrays(shape=(self.sweeper_samplecount,))
                 )
 
-        self.add_parameter('spectrum_length',
-                unit='pts',
-                label='spectrum length',
-                snapshot_value=False,
-                set_cmd = partial(self.sweeper.set, 'sample_count')) #zoomfft.set("bit"))
-
         self.add_parameter( 'spectrum_frequency',
                 unit='Hz',
                 label= 'Frequency',
@@ -243,13 +245,9 @@ class HF2LI(Instrument):
                 get_cmd= lambda : self.spectrum_samples[0][0]["grid"],
                 vals=vals.Arrays(shape=(self._spectrum_freq_length,))
             )
-        self.add_parameter( 'spectrum_span',
-                unit='Hz',
-                label= 'Averaging',
-                set_cmd = partial(self.daq_module.set, 'spectrum/frequencyspan' ,'spectrum_span' ),
-                get_cmd = partial( self._spectrum_get, 'spectrum/frequencyspan' )
-            ) 
-        for p, units in ( ('filter', 'dB'), ('r', 'dB')):
+
+        for p, units in ( ('psd_corrected', '$dBV$'), 
+            ('psd', '$dBV$')):
             self.add_parameter( p,
                     unit= units,
                     label= p,
@@ -258,6 +256,15 @@ class HF2LI(Instrument):
                     get_cmd= partial(self._get_spectrum, p ),
                     vals=vals.Arrays(shape=(self._spectrum_freq_length,))
             )
+
+        self._bits = 8
+        self.add_parameter( 'psd_points', 
+            units = '',
+            label = 'Points',
+            set_cmd = self._set_points,
+            get_cmd = lambda : 2**self._bits
+        )
+
         for i in range(6, num_sigout_mixer_channels):
             self.add_parameter(
                 name=f'sigout_enable{i}',
@@ -299,10 +306,6 @@ class HF2LI(Instrument):
         """ wrap zi sweeper.get
         """
         return self.sweeper.get( name )[name][0]
-    def _spectrum_get( self, name ) :
-        """ wrap zi sweeper.get
-        """
-        return self.zoomfft.get( name )[name][0]
 
     def _single_get(self, name):
         path = f'/{self.dev_id}/demods/{self.demod}/sample/'
@@ -322,22 +325,42 @@ class HF2LI(Instrument):
 
         return values
 
-    def _get_spectrum(self, param, fr=True):
+    def _get_spectrum(self, param ):
+        """ return spectrum in units of dBV/Hz
+        """
+
         if self.auto_trigger :
             self.trigger_spectrum()
 
-        amplitude = self._get_sigout_amplitude(self.sigout+6) / ( 2 * np.sqrt(2) ) # normalization factor for vpp 2x fudge
-        if param=='filter':
-            values = 20 * np.log10( (self.spectrum_samples[0][0]['r']/self.spectrum_samples[0][0][param]) * np.sqrt(2) / amplitude)
-        else:
-            values = 20 * np.log10( self.spectrum_samples[0][0][param]/amplitude )
-    
-        return values
+        # average over all samples
+        xiy = lambda entry : entry[0]['x'] + 1j * entry[0]['y']
+        data = [ xiy( entry ) for entry in self.spectrum_samples ]
+
+        # handle normalization
+        if param=='psd_corrected':
+            filter = self.spectrum_samples[0][0]['filter']
+            data = [ entry / filter for entry in data]
+
+        data = np.array( data )
+        data = np.abs( data )**2
+        data = np.mean( data, axis=0 )
+
+        # return values
+        return 10 * np.log10( data )
 
     def _get_theta(self):
         path = f'/{self.dev_id}/demods/{self.demod}/sample/'
         theta = np.arctan(self.daq.getSample(path)['y']/self.daq.getSample(path)['x'])*180/np.pi
         return theta
+
+    def bw3db( self ) :
+        """ Return 3dB bandwidth of self.demod
+        """
+        zi = self
+        zi.order(2)
+        o = zi.order()
+        tc = zi.timeconstant()
+        return np.sqrt(2**(1/(o))-1)/tc / ( 2 * np.pi )
 
     def trigger_sweep(self):
         sweeper = self.daq.sweep()
@@ -378,17 +401,16 @@ class HF2LI(Instrument):
             # 16=Exponential, 17=Cosine, 18=Cosine squared.
             zoomfft.set("window", 1)
             zoomfft.set("absolute", 1) # Return absolute frequencies instead of relative to 0.
-            zoomfft.set("bit", 10) # The number of lines is 2**bits.
-            loopcount = 1 # The number of zoomFFT's to perform.
-            zoomfft.set("loopcount", loopcount)
-            self.daq_module.set('grid/repetitions', 50)
+            zoomfft.set("bit", self._bits ) # The number of lines is 2**bits.
+            zoomfft.set("loopcount", self.averages() )
+            # self.daq_module.set('grid/repetitions', 50)
             path = "/%s/demods/%d/sample" % (self.dev_id, self.demod)
             zoomfft.subscribe(path)
             zoomfft.execute()
 
             start = time.time()
             timeout = 60  # [s]
-            print("Will perform", loopcount, "zoomFFTs.")
+
             while not zoomfft.finished():
                 time.sleep(0.2)
                 progress = zoomfft.progress()
@@ -424,6 +446,10 @@ class HF2LI(Instrument):
         t = (sample['timestamp'] - sample['timestamp'][0]) / clockbase 
         return (X, Y, t)
 
+    def _set_points( self, points ) :
+        """ set number of fft points to the nearest power of 2
+        """
+        self._bits = np.round( np.log2( points ) )
 
     def _get_phase(self) -> float:
         path = f'/{self.dev_id}/demods/{self.demod}/phaseshift/'
@@ -463,6 +489,27 @@ class HF2LI(Instrument):
         keys = list(self.OUTPUT_MAPPING.keys())
         idx = keys[list(self.OUTPUT_MAPPING.values()).index(channel)]
         self.daq.setInt(path, idx)
+
+    def _get_demod_param( self, param ) :
+        """ get demod parameter
+        Args:
+            param: string parameter name. eg timeconstant\
+        Returns:
+            parameter value as a double
+        """
+        path = f'/{self.dev_id}/demods/{self.demod}/{param}/'
+        return self.daq.getDouble(path)
+
+
+    def _set_demod_param( self, param, value ) :
+        """ set demod parameter
+        Args:
+            param: string parameter name. eg timeconstant\
+        Returns:
+            parameter value as a double
+        """
+        path = f'/{self.dev_id}/demods/{self.demod}/{param}/'
+        self.daq.setDouble(path, value)
 
     def _get_time_constant(self) -> float:
         path = f'/{self.dev_id}/demods/{self.demod}/timeconstant/'
