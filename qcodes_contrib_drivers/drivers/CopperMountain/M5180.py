@@ -50,7 +50,7 @@ class FrequencySweepMagPhase(MultiParameter):
                 f"{instrument.short_name} {name} magnitude",
                 f"{instrument.short_name} {name} phase",
             ),
-            units=("dB", "rad"),
+            units=("dB", "deg"),
             setpoint_units=(("Hz",), ("Hz",)),
             setpoint_labels=(
                 (f"{instrument.short_name} frequency",),
@@ -84,23 +84,26 @@ class FrequencySweepMagPhase(MultiParameter):
             Tuple[ParamRawDataType, ...]: magnitude, phase
         """
         assert isinstance(self.instrument, M5180)
-        self.instrument.write('CALC1:PAR:COUN 1') # 1 trace
-        self.instrument.write('CALC1:PAR1:DEF {}'.format(self.name))
-        self.instrument.trigger_source('bus') # set the trigger to bus
-        self.instrument.write('TRIG:SEQ:SING') # Trigger a single sweep
-        self.instrument.ask('*OPC?') # Wait for measurement to complete
+        vna = self.instrument
+        name = self.name
+
+        vna.write('CALC1:PAR:COUN 2') # 2 traces
+        vna.write('CALC1:PAR1:DEF {}'.format(name))
+        vna.trigger_source('bus') # set the trigger to bus
+        vna.write('TRIG:SEQ:SING') # Trigger a single sweep
+        vna.ask('*OPC?') # Wait for measurement to complete
 
         # get data from instrument
-        self.instrument.write('CALC1:TRAC1:FORM SMITH')  # ensure correct format
-        sxx_raw = self.instrument.ask("CALC1:TRAC1:DATA:FDAT?")
-        self.instrument.write('CALC1:TRAC1:FORM MLOG')
+        vna.write('CALC1:TRAC1:FORM MLOG')  # ensure correct format
+        vna.write('CALC1:TRAC2:FORM PHASE')  # ensure correct format
 
-        # Get data as numpy array
-        sxx = np.fromstring(sxx_raw, dtype=float, sep=',')
-        sxx = sxx[0::2] + 1j*sxx[1::2]
 
-        return self.instrument._db(sxx), np.unwrap(np.angle(sxx))
-
+        logmag = vna.ask("CALC1:TRAC1:DATA:FDAT?")
+        logmag = np.fromstring(logmag, dtype=float, sep=',')[::2]
+        phase = vna.ask("CALC1:TRAC2:DATA:FDAT?")
+        phase = np.fromstring(phase, dtype=float, sep=',')[::2]
+        vna.trigger_source('internal')
+        return logmag, phase
 
 class PointMagPhase(MultiParameter):
     """
