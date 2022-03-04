@@ -246,8 +246,8 @@ class HF2LI(Instrument):
                 vals=vals.Arrays(shape=(self._spectrum_freq_length,))
             )
 
-        for p, units in ( ('psd_corrected', '$dBV$'), 
-            ('psd', '$dBV$')):
+        for p, units in ( ('psd_corrected', '$dBV/Hz$'), 
+            ('psd', '$dBV/Hz$')):
             self.add_parameter( p,
                     unit= units,
                     label= p,
@@ -344,7 +344,8 @@ class HF2LI(Instrument):
         data = np.array( data )
         data = np.abs( data )**2
         data = np.mean( data, axis=0 )
-
+        bw = self.rate() / self.psd_points()
+        data = data / bw
         # return values
         return 10 * np.log10( data )
 
@@ -409,7 +410,7 @@ class HF2LI(Instrument):
             zoomfft.execute()
 
             start = time.time()
-            timeout = 60  # [s]
+            timeout = 60000  # [s]
 
             while not zoomfft.finished():
                 time.sleep(0.2)
