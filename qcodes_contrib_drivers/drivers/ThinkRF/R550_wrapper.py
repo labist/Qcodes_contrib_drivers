@@ -229,7 +229,7 @@ class R550_wrapper(Instrument):
 
             flist = np.linspace(fstart,fstop,len(spectra))
 
-            filteredFreq,filteredSpectra = self.filter_span(flist,spectra)
+            filteredFreq, filteredSpectra = self.filter_span(flist,spectra)
             
             return len(filteredSpectra)
 

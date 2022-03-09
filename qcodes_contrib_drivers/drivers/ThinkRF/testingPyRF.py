@@ -38,7 +38,7 @@ dut.freq(F_CENTER)
 dut.trigger(TRIGGER_SETTING)
 dut.scpiset(':SOUR:REF:PLL EXT')
 
-# setup my graph
+# setup graph
 fstart, fstop, spectra_data = capture_spectrum(dut,RBW,average=100)
 
 fig = figure(1)

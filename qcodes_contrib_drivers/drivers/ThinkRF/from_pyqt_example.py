@@ -31,13 +31,13 @@ import time
 
 
 RFE_MODE = 'SH' 
-CENTER_FREQ = 5888e6 #5.881e9 # - 100e6
+CENTER_FREQ = 6e9 #5.881e9 # - 100e6
 SPP = 32*512
 PPB = 1
-RBW = 125e6 / (SPP * PPB)  # 125 MHz is the sampling rate
-AVERAGE = 500
+RBW = 125e6 / (SPP * PPB * 2)  # 125 MHz is the sampling rate
+AVERAGE = 5000
 DECIMATION = 1 # no decimation
-ATTENUATION = 0
+ATTENUATION = 20
 GAIN = 'HIGH'
 TRIGGER_SETTING = {'type': 'NONE',
                 'fstart': (CENTER_FREQ - 1e6), # some value
@@ -60,20 +60,34 @@ dut.psfm_gain(GAIN)
 dut.trigger(TRIGGER_SETTING)
 
 
-start = time.time()
+avglist = [1,5,10,50,100,500,1000,5000,10000]
+timelist = []
+
+#for avg in avglist:
+startT = time.time()
 fstart, fstop, pow_data = capture_spectrum(dut, RBW, AVERAGE, DECIMATION)
 freq_range = np.linspace(fstart , fstop, len(pow_data))
-stop = time.time()
-plt.plot( freq_range, pow_data )
-
-print( f"{stop - start:e} seconds" )
+stopT = time.time()
+# plt.plot( freq_range, pow_data )
+print(f"Averages = {AVERAGE}, time = {stopT-startT:2.2f} sec")
+#   timelist.append(stopT-startT)
+#%%
+len(pow_data)
+#%%
+plt.plot(freq_range,pow_data)
 #%%
 span = 40e6
 fbegin = CENTER_FREQ - span/2
 fend = CENTER_FREQ + span/2
 keep = (  fbegin <  freq_range ) & ( freq_range < fend )
-plt.plot( freq_range[keep], pow_data[keep] )
+#plt.plot( freq_range[keep], pow_data[keep] )
+plt.plot( np.linspace(fbegin, fend, len(pow_data[keep])), pow_data[keep] )
 ax = plt.gca()
 ax.set_xlabel('f (Hz)')
 ax.set_ylabel('Power (dBm)')
+# %%
+plt.plot(avglist, timelist, '--x')
+plt.xlabel("N Averages")
+plt.ylabel("Time [s]")
+    
 # %%
