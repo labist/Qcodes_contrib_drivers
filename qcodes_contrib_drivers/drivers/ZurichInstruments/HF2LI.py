@@ -2,6 +2,8 @@ from typing import Dict, List, Optional, Sequence, Any, Union
 from functools import partial
 import numpy as np
 import logging
+
+from py import process
 log = logging.getLogger(__name__)
 
 import time
@@ -246,8 +248,11 @@ class HF2LI(Instrument):
                 vals=vals.Arrays(shape=(self._spectrum_freq_length,))
             )
 
-        for p, units in ( ('psd_corrected', '$dBV/Hz$'), 
-            ('psd', '$dBV/Hz$')):
+        # each psd type must have an associated _process_psd_xx function
+        # see self._get_spectrum for details
+        for p, units in ( ('psd_corrected', '$V^2/Hz$'), 
+            ('psd', '$V^2/Hz$'), ('psd_I', '$V^2/Hz$'),
+            ('psd_Q', '$V^2/Hz$'),('psd_IQ', '$V^2/Hz$')):
             self.add_parameter( p,
                     unit= units,
                     label= p,
@@ -256,6 +261,7 @@ class HF2LI(Instrument):
                     get_cmd= partial(self._get_spectrum, p ),
                     vals=vals.Arrays(shape=(self._spectrum_freq_length,))
             )
+
 
         self._bits = 8
         self.add_parameter( 'psd_points', 
@@ -294,7 +300,7 @@ class HF2LI(Instrument):
     def _spectrum_freq_length(self):
         #return self.daq_module.get('grid/cols')['grid']['cols'][0]-1
         return len(self.spectrum_samples[0][0]["grid"])
-    
+
     def _get_time_constant(self):
         path = f'/{self.dev_id}/demods/{self.demod}/timeconstant/'
         return self.daq.getDouble(path)
@@ -326,28 +332,66 @@ class HF2LI(Instrument):
         return values
 
     def _get_spectrum(self, param ):
-        """ return spectrum in units of dBV/Hz
+        """ return spectrum in units of V**2/Hz
         """
 
         if self.auto_trigger :
             self.trigger_spectrum()
 
-        # average over all samples
-        xiy = lambda entry : entry[0]['x'] + 1j * entry[0]['y']
-        data = [ xiy( entry ) for entry in self.spectrum_samples ]
+        processor = getattr( self, f'_process_{param}' )
+        data = processor()
 
-        # handle normalization
-        if param=='psd_corrected':
-            filter = self.spectrum_samples[0][0]['filter']
-            data = [ entry / filter for entry in data]
-
-        data = np.array( data )
-        data = np.abs( data )**2
         data = np.mean( data, axis=0 )
         bw = self.rate() / self.psd_points()
         data = data / bw
         # return values
-        return 10 * np.log10( data )
+        return data
+
+    def _process_psd_corrected( self ) :
+        """ perform processing for corrected psd
+        returns data, ready for averaging
+        """
+
+        xiy = lambda entry : entry[0]['x'] + 1j * entry[0]['y']
+        data = [ xiy( entry ) for entry in self.spectrum_samples ]
+
+
+        filter = self.spectrum_samples[0][0]['filter']
+        data = [ entry / filter for entry in data]
+
+        data = np.array( data )
+        return np.abs( data )**2
+
+    def _process_psd( self ) :
+        """ perform processing for psd
+        """
+        xiy = lambda entry : entry[0]['x'] + 1j * entry[0]['y']
+        data = [ xiy( entry ) for entry in self.spectrum_samples ]
+        data = np.array( data )
+        return np.abs( data )**2
+    
+    def _process_psd_I(self) :
+        xiy = lambda entry : (entry[0]['x']+entry[0]['x'][::-1] + 1j * (entry[0]['y']-entry[0]['y'][::-1])/2)
+        data = [ xiy( entry ) for entry in self.spectrum_samples ]
+        data = np.array( data )
+        
+        return np.abs( data )**2
+
+    def _process_psd_Q(self) :
+        xiy = lambda entry : (entry[0]['x']-entry[0]['x'][::-1] + 1j * (entry[0]['y']+entry[0]['y'][::-1])/(2*1j))
+        data = [ xiy( entry ) for entry in self.spectrum_samples ]
+        data = np.array( data )
+        return np.abs( data )**2
+
+    def _process_psd_IQ(self) :
+        xiyQ = lambda entry : (entry[0]['x']-entry[0]['x'][::-1] + 1j * (entry[0]['y']+entry[0]['y'][::-1])/(2*1j))
+        dataQ = [ xiyQ( entry ) for entry in self.spectrum_samples ]
+        dataQ = np.array( dataQ )
+        xiyI = lambda entry : (entry[0]['x']+entry[0]['x'][::-1] + 1j * (entry[0]['y']-entry[0]['y'][::-1])/2)
+        dataI = [ xiyI( entry ) for entry in self.spectrum_samples ]
+        dataI = np.array( dataI )
+        dataIQ = dataI*np.conjugate(dataQ)
+        return np.real( dataIQ )
 
     def _get_theta(self):
         path = f'/{self.dev_id}/demods/{self.demod}/sample/'
@@ -422,8 +466,9 @@ class HF2LI(Instrument):
 
             return_flat_data_dict = True
             data = zoomfft.read(return_flat_data_dict)
-            zoomfft.unsubscribe(path)
             self.spectrum_samples = data[path]
+            zoomfft.unsubscribe(path)
+            
 
     def _get_data(self, poll_length=0.1) -> float:
         path = f'/{self.dev_id}/demods/{self.demod}/sample'
