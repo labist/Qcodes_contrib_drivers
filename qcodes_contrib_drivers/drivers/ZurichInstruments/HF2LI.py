@@ -252,7 +252,10 @@ class HF2LI(Instrument):
         # see self._get_spectrum for details
         for p, units in ( ('psd_corrected', '$V^2/Hz$'), 
             ('psd', '$V^2/Hz$'), ('psd_i', '$V^2/Hz$'),
-            ('psd_q', '$V^2/Hz$'),('psd_iq', '$V^2/Hz$')):
+            ('psd_q', '$V^2/Hz$'),('psd_iq', '$V^2/Hz$'),
+            ('psd_x', '$V^2/Hz$'),('psd_y', '$V^2/Hz$'),
+            ('psd_xy', '$V^2/Hz$')
+            ):
             self.add_parameter( p,
                     unit= units,
                     label= p,
@@ -382,16 +385,28 @@ class HF2LI(Instrument):
 
     def _process_psd_x(self) :
         """ x psd """
-        return 0
+        x = lambda entry : entry[0]['x']
+        data = [ x( entry ) for entry in self.spectrum_samples ]
+        data = self._normalize_spectra( data )
+        return data**2
+
     def _process_psd_y(self) :
         """ y psd """
-        return 0
+        y = lambda entry : entry[0]['y']
+        data = [ y( entry ) for entry in self.spectrum_samples ]
+        data = self._normalize_spectra( data )
+        return data**2
+
     def _process_psd_xy(self) :
         """ xy psd """
-        return 0
-    def _process_psd_yx(self) :
-        """ yx psd """
-        return 0
+        x = lambda entry : entry[0]['x']
+        xdata = [ x( entry ) for entry in self.spectrum_samples ]
+        xdata = self._normalize_spectra( xdata )
+
+        y = lambda entry : entry[0]['y']
+        ydata = [ y( entry ) for entry in self.spectrum_samples ]
+        ydata = self._normalize_spectra( ydata )
+        return xdata*ydata
 
     def _process_psd_i(self) :
         xiy = lambda entry : (entry[0]['x']+entry[0]['x'][::-1] + 1j * (entry[0]['y']-entry[0]['y'][::-1])/2)
