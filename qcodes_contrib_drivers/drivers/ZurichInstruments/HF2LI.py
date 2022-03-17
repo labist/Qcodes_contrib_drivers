@@ -251,8 +251,8 @@ class HF2LI(Instrument):
         # each psd type must have an associated _process_psd_xx function
         # see self._get_spectrum for details
         for p, units in ( ('psd_corrected', '$V^2/Hz$'), 
-            ('psd', '$V^2/Hz$'), ('psd_I', '$V^2/Hz$'),
-            ('psd_Q', '$V^2/Hz$'),('psd_IQ', '$V^2/Hz$')):
+            ('psd', '$V^2/Hz$'), ('psd_i', '$V^2/Hz$'),
+            ('psd_q', '$V^2/Hz$'),('psd_iq', '$V^2/Hz$')):
             self.add_parameter( p,
                     unit= units,
                     label= p,
@@ -370,27 +370,56 @@ class HF2LI(Instrument):
         data = np.array( data )
         return np.abs( data )**2
     
-    def _process_psd_I(self) :
+    def _normalize_spectra(self, data) :
+        """ normalize spectrum to filter.
+        Args:
+            data: list of data to normalize
+        Returns:
+            normalized data as np array
+        """
+        filter = self.spectrum_samples[0][0]['filter']
+        return np.array( [ entry / filter for entry in data] )
+
+    def _process_psd_x(self) :
+        """ x psd """
+        return 0
+    def _process_psd_y(self) :
+        """ y psd """
+        return 0
+    def _process_psd_xy(self) :
+        """ xy psd """
+        return 0
+    def _process_psd_yx(self) :
+        """ yx psd """
+        return 0
+
+    def _process_psd_i(self) :
         xiy = lambda entry : (entry[0]['x']+entry[0]['x'][::-1] + 1j * (entry[0]['y']-entry[0]['y'][::-1])/2)
         data = [ xiy( entry ) for entry in self.spectrum_samples ]
-        data = np.array( data )
-        
+
+        data = self._normalize_spectra( data )
+
         return np.abs( data )**2
 
-    def _process_psd_Q(self) :
+    def _process_psd_q(self) :
         xiy = lambda entry : (entry[0]['x']-entry[0]['x'][::-1] + 1j * (entry[0]['y']+entry[0]['y'][::-1])/(2*1j))
         data = [ xiy( entry ) for entry in self.spectrum_samples ]
-        data = np.array( data )
+    
+        data = self._normalize_spectra( data )
         return np.abs( data )**2
 
-    def _process_psd_IQ(self) :
+    def _process_psd_iq(self) :
         xiyQ = lambda entry : (entry[0]['x']-entry[0]['x'][::-1] + 1j * (entry[0]['y']+entry[0]['y'][::-1])/(2*1j))
         dataQ = [ xiyQ( entry ) for entry in self.spectrum_samples ]
-        dataQ = np.array( dataQ )
+        
         xiyI = lambda entry : (entry[0]['x']+entry[0]['x'][::-1] + 1j * (entry[0]['y']-entry[0]['y'][::-1])/2)
         dataI = [ xiyI( entry ) for entry in self.spectrum_samples ]
-        dataI = np.array( dataI )
+        
+        dataI = self._normalize_spectra( dataI )
+        dataQ = self._normalize_spectra( dataQ )
+
         dataIQ = dataI*np.conjugate(dataQ)
+
         return np.real( dataIQ )
 
     def _get_theta(self):
