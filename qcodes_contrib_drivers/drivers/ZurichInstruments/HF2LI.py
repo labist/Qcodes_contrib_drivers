@@ -93,6 +93,15 @@ class HF2LI(Instrument):
             self._set_output_select(ch)
             
         self.add_parameter(
+            name='ext_clk',
+            label='External Clock',
+            unit='',
+            set_cmd=self._set_ext_clk,
+            get_cmd=self._get_ext_clk,
+            vals=vals.Bool()
+        )
+        
+        self.add_parameter(
             name='phase',
             label='Phase',
             unit='deg',
@@ -320,6 +329,18 @@ class HF2LI(Instrument):
         path = f'/{self.dev_id}/demods/{self.demod}/sample/'
         return self.daq.getSample(path)[name][0]
     
+    def _set_ext_clk(self, val):
+        """ set external 10 MHz clock
+        """
+        path = f'/{self.dev_id}/system/extclk'
+        self.daq.setInt(path, int(val) )
+
+    def _get_ext_clk( self ):
+        """ get external 10 MHz clock as bool
+        """
+        path = f'/{self.dev_id}/system/extclk'
+        val = self.daq.getInt( path )
+        return bool( val )
 
     def _get_sweep_param(self, param, fr=True):
         if self.auto_trigger :
