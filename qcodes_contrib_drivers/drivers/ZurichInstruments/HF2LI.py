@@ -262,7 +262,7 @@ class HF2LI(Instrument):
         for p, units in ( ('psd_corrected', '$V^2/Hz$'), 
             ('psd', '$V^2/Hz$'), ('psd_i', '$V^2/Hz$'),
             ('psd_q', '$V^2/Hz$'),('psd_iq', '$V^2/Hz$'),
-            ('psd_x', '$V^2/Hz$'),('psd_y', '$V^2/Hz$'),
+            ('psd_xx', '$V^2/Hz$'),('psd_yy', '$V^2/Hz$'),
             ('psd_xy', '$V^2/Hz$')
             ):
             self.add_parameter( p,
@@ -404,14 +404,14 @@ class HF2LI(Instrument):
         filter = self.spectrum_samples[0][0]['filter']
         return np.array( [ entry / filter for entry in data] )
 
-    def _process_psd_x(self) :
+    def _process_psd_xx(self) :
         """ x psd """
         x = lambda entry : entry[0]['x']
         data = [ x( entry ) for entry in self.spectrum_samples ]
         data = self._normalize_spectra( data )
         return data**2
 
-    def _process_psd_y(self) :
+    def _process_psd_yy(self) :
         """ y psd """
         y = lambda entry : entry[0]['y']
         data = [ y( entry ) for entry in self.spectrum_samples ]
@@ -430,16 +430,27 @@ class HF2LI(Instrument):
         return xdata*ydata
 
     def _process_psd_i(self) :
-        xiy = lambda entry : (entry[0]['x']+entry[0]['x'][::-1] + 1j * (entry[0]['y']-entry[0]['y'][::-1])/2)
-        data = [ xiy( entry ) for entry in self.spectrum_samples ]
+
+        def i( entry ) :
+            x = entry[0]['x']
+            y = entry[0]['y']
+            i = (x + x[::-1] )/2 + 1j * (y - y[::-1])/2
+            return i
+
+        data = [ i( entry ) for entry in self.spectrum_samples ]
 
         data = self._normalize_spectra( data )
 
         return np.abs( data )**2
 
     def _process_psd_q(self) :
-        xiy = lambda entry : (entry[0]['x']-entry[0]['x'][::-1] + 1j * (entry[0]['y']+entry[0]['y'][::-1])/(2*1j))
-        data = [ xiy( entry ) for entry in self.spectrum_samples ]
+        def q( entry ) :
+            x = entry[0]['x']
+            y = entry[0]['y']
+            q = (x - x[::-1] )/2j + 1j * (y + y[::-1])/2j
+            return q
+
+        data = [ q( entry ) for entry in self.spectrum_samples ]
     
         data = self._normalize_spectra( data )
         return np.abs( data )**2
