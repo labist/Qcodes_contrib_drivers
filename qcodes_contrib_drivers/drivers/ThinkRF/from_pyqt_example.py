@@ -50,7 +50,7 @@ dut = WSA()
 
 dut.connect('169.254.16.253')
 
-# initialize RTSA configurations
+#%% initialize RTSA configurations
 dut.reset()
 dut.request_read_perm()
 dut.rfe_mode(RFE_MODE)

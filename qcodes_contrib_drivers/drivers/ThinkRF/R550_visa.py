@@ -1,3 +1,9 @@
+######
+# this was an attempt to make the driver from scratch
+# not recommended because the pyrf module exists, and writing vrt parser
+# on your own can be very painful
+######
+
 import numpy as np
 from typing import Sequence, Union, Any
 

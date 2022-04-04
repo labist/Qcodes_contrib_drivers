@@ -1,23 +1,27 @@
+############
+# this driver is a wrapper around the pyrf api
+# note that this driver has an implementation that uses block capture (capture_spectrum function of pyrf API)
+# therefore, spectra taken only has a span of 40MHz or 60 MHz depending on chosen RBW
+############
+
+# pyrf imports
 from pyrf.devices.thinkrf import WSA
 from pyrf.sweep_device import SweepDevice
 from pyrf.util import capture_spectrum
 from pyrf.util import compute_usable_bins
+from pyrf.sweep_device import SweepDevice
 
-
-import sys
-import time
-import math
-
-from matplotlib.pyplot import plot, figure, axis, xlabel, ylabel, show
-import numpy as np
-
-from typing import Sequence, Union, Any
-
-
+# qcodes imports
 from qcodes.instrument.base import Instrument
 from qcodes.instrument.parameter import ParameterWithSetpoints, Parameter
 from qcodes.dataset.measurements import Measurement
 from qcodes.utils.validators import Numbers, Arrays, Enum
+
+# general imports
+import numpy as np
+from typing import Sequence, Union, Any
+
+
 
 class GeneratedSetPoints(Parameter):
     """
@@ -43,23 +47,15 @@ class GeneratedSetPoints(Parameter):
         
 
 class SpectrumArray(ParameterWithSetpoints):
-    
+    '''
+    generates an array of noise spectra data with frequency setpoints using block capture
+    '''
     def get_raw(self):
        
-        # dut = self.root_instrument.dut
-        # RBW = self.root_instrument.rbw()
-        # average = self.root_instrument.average()
-        # decimation = self.root_instrument._decimation
 
-       # fstart, fstop, spectra = capture_spectrum( dut,RBW,average,decimation)
-
-     #   flist = np.linspace(fstart,fstop,len(spectra))
-      #  __, filteredSpectra = self.root_instrument.filter_span(flist,spectra)
-
-        npoints = self.root_instrument.n_points() # n_points captures scpectrum
+        npoints = self.root_instrument.n_points() # n_points calls capture scpectrum in device
 
         return self.root_instrument._spectra
-
 
 class R550_wrapper(Instrument):
     ## wrapper around the pyRF API to use R550 with QCoDes
@@ -82,9 +78,20 @@ class R550_wrapper(Instrument):
         self._decimation = 1
         self._reflevel = 0
 
+        self._capture_mode = 'BLOCK'
+
         self._freqlist = []
         self._spectralist = []
-        
+
+        # sweep capture is not implemented yet
+        self.add_parameter('capture_mode',
+                                unit = '',
+                                initial_value= 'BLOCK',
+                                vals = Enum('BLOCK','SWEEP'),
+                                label = 'Capture Mode',
+                                get_cmd = self.get_capture_mode,
+                                set_cmd = self.set_capture_mode,
+                                get_parser = str)
         
         self.add_parameter('rfe_mode',
                                 unit = '',
@@ -147,10 +154,11 @@ class R550_wrapper(Instrument):
                                 set_cmd = self.set_span ,
                                 get_parser = float)
 
+        #TODO : implement a function that automatically adjusts the RWB to the value closest to the one in the device properties list
         self.add_parameter('rbw',
                                 unit = 'Hz',
                                # initial_value= 125e6 / (self.spp() * self.ppb),
-                                label = 'resolution bancwidth',
+                                label = 'resolution bandwidth',
                                 # vals = Numbers(0,100e6),
                                 get_cmd = self.get_RBW,
                                 set_cmd = self.set_RBW ,
@@ -192,7 +200,7 @@ class R550_wrapper(Instrument):
         
         self.add_parameter('freq_axis',
                                 unit='Hz',
-                                label='Freq',
+                                label='Frequency',
                                 parameter_class=GeneratedSetPoints,
                                 startparam=self.f_start,
                                 stopparam=self.f_stop,
@@ -204,15 +212,19 @@ class R550_wrapper(Instrument):
                                 setpoints=(self.freq_axis,),
                                 label='Noise power',
                                 parameter_class=SpectrumArray,
-                                dut = self.dut,
-                                RBW = self.rbw,
-                                average = self.average,
-                                decimation = self._decimation,
                                 vals=Arrays(shape=(self.n_points.get_latest,)))
 
     ## helper functions
     def filter_span(self,fullFreq,fullSpectra):
-            
+            '''
+            args:
+                fullFreq : frequency array returned by block capture
+                fullSpectra : power spectrum array returned by block capture
+        
+            returns:
+                frequency and spectra filtered according to the start and stop
+                frequencies set on the device
+            '''
             freqfilter = (  self.f_start() <  fullFreq ) & ( fullFreq < self.f_stop() )
             spectra = fullSpectra[freqfilter]
             freq = fullFreq[freqfilter]
@@ -224,14 +236,44 @@ class R550_wrapper(Instrument):
     
     ## setters and getters (maybe there's a way of avoiding these?)
     def get_npoints(self):
-            
-            fstart, fstop, spectra = capture_spectrum(self.dut,self.rbw(),self.average())
+            '''
+            get the number of points by calling capture function and filtering to start/stop frequencies, if required
+            '''
 
-            flist = np.linspace(fstart,fstop,len(spectra))
+            if (self._capture_mode == 'BLOCK'):
+                fstart, fstop, spectra = capture_spectrum(self.dut,self.rbw(),self.average())
 
-            filteredFreq, filteredSpectra = self.filter_span(flist,spectra)
-            
-            return len(filteredSpectra)
+                flist = np.linspace(fstart,fstop,len(spectra))
+
+                filteredFreq, filteredSpectra = self.filter_span(flist,spectra)
+                
+                return len(filteredSpectra)
+        
+            if (self._capture_mode == 'SWEEP'):
+                
+                #TODO : calling center frequency function (or any function that returns numeric data) after sweepdev creation gives error, find a workaround
+                scan_startf = self.f_start() 
+                scan_stopf = self.f_stop()
+                atten = self.attenuation()
+                rbw = self.rbw()
+                mode = self.rfe_mode()
+                avg = self._average()
+
+                sweepdev = SweepDevice(self.dut)
+
+                fstart, fstop, spectra = sweepdev.capture_power_spectrum(scan_startf,
+                                scan_stopf,
+                                rbw,
+                                {'attenuator':atten},
+                                mode = mode,
+                                niter=1,
+                                average = avg)
+                
+                self._freqlist = np.linspace(fstart,fstop,len(spectra))
+                self._spectra = spectra
+
+                return (len(spectra))
+                    
 
 #     def set_npoints(self,n):
 #             self._RBW = 0.81 * self._span()/n ## approximate correction to compensate for usable bins calculation
@@ -259,3 +301,9 @@ class R550_wrapper(Instrument):
 
     def set_ref(self, ref):
             self._reflevel = ref
+
+    def set_capture_mode(self, mode):         
+            self._capture_mode = mode
+
+    def get_capture_mode(self):
+            return self._capture_mode
