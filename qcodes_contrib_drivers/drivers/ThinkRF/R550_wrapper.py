@@ -21,16 +21,13 @@ from qcodes.utils.validators import Numbers, Arrays, Enum
 import numpy as np
 from typing import Sequence, Union, Any
 
-
-
 class GeneratedSetPoints(Parameter):
     """
     A parameter that generates a setpoint array from start, stop, and n_points
-
-                           parameter_class=GeneratedSetPoints,
-                           startparam=self.f_start,
-                           stopparam=self.f_stop,
-                           xpointsparam=self.n_points,
+    parameter_class=GeneratedSetPoints,
+    startparam=self.f_start,
+    stopparam=self.f_stop,
+    xpointsparam=self.n_points,
     """
     def __init__(self, startparam, stopparam, xpointsparam, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -48,14 +45,13 @@ class GeneratedSetPoints(Parameter):
 
 class SpectrumArray(ParameterWithSetpoints):
     '''
-    generates an array of noise spectra data with frequency setpoints using block capture
+    generates an array of noise spectra data with frequency setpoints
     '''
     def get_raw(self):
-       
-
         npoints = self.root_instrument.n_points() # n_points calls capture scpectrum in device
 
         return self.root_instrument._spectra
+
 
 class R550_wrapper(Instrument):
     ## wrapper around the pyRF API to use R550 with QCoDes
@@ -236,74 +232,75 @@ class R550_wrapper(Instrument):
     
     ## setters and getters (maybe there's a way of avoiding these?)
     def get_npoints(self):
-            '''
-            get the number of points by calling capture function and filtering to start/stop frequencies, if required
-            '''
+        '''
+        get the number of points by calling capture function and filtering 
+        to start/stop frequencies, if required
+        '''
 
-            if (self._capture_mode == 'BLOCK'):
-                fstart, fstop, spectra = capture_spectrum(self.dut,self.rbw(),self.average())
+        if (self._capture_mode == 'BLOCK'):
+            fstart, fstop, spectra = capture_spectrum(self.dut,self.rbw(),self.average())
 
-                flist = np.linspace(fstart,fstop,len(spectra))
+            flist = np.linspace(fstart,fstop,len(spectra))
 
-                filteredFreq, filteredSpectra = self.filter_span(flist,spectra)
-                
-                return len(filteredSpectra)
+            filteredFreq, filteredSpectra = self.filter_span(flist,spectra)
+            
+            return len(filteredSpectra)
         
-            if (self._capture_mode == 'SWEEP'):
+        if (self._capture_mode == 'SWEEP'):
                 
-                #TODO : calling center frequency function (or any function that returns numeric data) after sweepdev creation gives error, find a workaround
-                scan_startf = self.f_start() 
-                scan_stopf = self.f_stop()
-                atten = self.attenuation()
-                rbw = self.rbw()
-                mode = self.rfe_mode()
-                avg = self._average()
+            #TODO : calling center frequency function (or any function that returns numeric data) after sweepdev creation gives error, find a workaround
+            scan_startf = self.f_start() 
+            scan_stopf = self.f_stop()
+            atten = self.attenuation()
+            rbw = self.rbw()
+            mode = self.rfe_mode()
+            avg = self._average()
 
-                sweepdev = SweepDevice(self.dut)
+            sweepdev = SweepDevice(self.dut)
 
-                fstart, fstop, spectra = sweepdev.capture_power_spectrum(scan_startf,
-                                scan_stopf,
-                                rbw,
-                                {'attenuator':atten},
-                                mode = mode,
-                                niter=1,
-                                average = avg)
-                
-                self._freqlist = np.linspace(fstart,fstop,len(spectra))
-                self._spectra = spectra
+            fstart, fstop, spectra = sweepdev.capture_power_spectrum(scan_startf,
+                            scan_stopf,
+                            rbw,
+                            {'attenuator':atten},
+                            mode = mode,
+                            niter=1,
+                            average = avg)
+            
+            self._freqlist = np.linspace(fstart,fstop,len(spectra))
+            self._spectra = spectra
 
-                return (len(spectra))
+            return (len(spectra))
                     
 
 #     def set_npoints(self,n):
 #             self._RBW = 0.81 * self._span()/n ## approximate correction to compensate for usable bins calculation
 
     def get_avg(self):
-            return self._average
+        return self._average
 
     def set_avg(self, avg):
-            self._average = avg
+        self._average = avg
 
     def get_span(self):
-            return self._span
+        return self._span
 
     def set_span(self, bw):
-            self._span = bw
+        self._span = bw
 
     def get_RBW(self):
-            return self._RBW
+        return self._RBW
 
     def set_RBW(self, rbw):
-            self._RBW = rbw
+        self._RBW = rbw
 
     def get_ref(self):
-            return self._reflevel
+        return self._reflevel
 
     def set_ref(self, ref):
-            self._reflevel = ref
+        self._reflevel = ref
 
     def set_capture_mode(self, mode):         
-            self._capture_mode = mode
+        self._capture_mode = mode
 
     def get_capture_mode(self):
-            return self._capture_mode
+        return self._capture_mode

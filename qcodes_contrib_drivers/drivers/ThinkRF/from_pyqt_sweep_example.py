@@ -20,13 +20,11 @@ from pyrf.util import capture_spectrum
 
 from time import time
 import matplotlib.pyplot as plt
-
-from qcodes_contrib_drivers.drivers.ThinkRF.R550_wrapper import R550_wrapper
-
+from pyrf.vrt import vrt_packet_reader
 #%%
 RFE_MODE = 'SH'
-START_FREQ = 5.98726e9
-STOP_FREQ = 6.02345e9
+START_FREQ = 5.5e9
+STOP_FREQ = 6.5e9
 CENTER_FREQ = 6e9 
 SPP = 32 * 512
 PPB = 1
@@ -67,5 +65,3 @@ plt.plot(freq_range,spectra_data, label = 'Sweep capture')
 # %%
 atten = sweepdev.real_device.attenuator()
 print(atten)
-
-# %%
