@@ -18,7 +18,7 @@ from typing import Sequence, Union, Any
 
 class Setpoints(Parameter):
     """
-    Setpoints parameter
+    Parameter for generating setpoints of Signal Analyzer spectrum.
     """
     def __init__(self, startpar, stoppar, npointspar, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -40,8 +40,7 @@ class Setpoints(Parameter):
 
 class SpectrumArray(ParameterWithSetpoints):
     '''
-    Generates an array of noise spectra data with 
-    frequency setpoints using capture_sweep_device
+    Parameter for invoking the sweep in R5500 and returning spectral data
     '''
     def get_raw(self):
         sa = self.root_instrument
@@ -50,7 +49,10 @@ class SpectrumArray(ParameterWithSetpoints):
 
 
 class R5500(Instrument):
-    ## wrapper around the pyRF API to use R550 with QCoDes
+    """
+    Driver for ThinkRF R5500 to run in the sweep mode. This modes allows
+    arbitrary span instead of the native IBW of the SA.
+    """
     def __init__(self,
                  name: str,
                  address: str,
@@ -150,7 +152,6 @@ class R5500(Instrument):
                                 parameter_class=SpectrumArray,
                                 vals=Arrays(shape=(self.n_points.get_latest,)))
 
-
     def get_npoints(self):
         '''
         Configs the sweep and collects the data. Returns length of data for
@@ -189,8 +190,6 @@ class R5500(Instrument):
         self.dut.sweep_stop()
         self.dut.abort()
         self.dut.flush_captures()
-
-        print("INVOKED !")
 
         return len(spectrum)
                     
