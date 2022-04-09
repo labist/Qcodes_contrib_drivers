@@ -53,8 +53,8 @@ class FrequencySweepMagPhase(MultiParameter):
             units=("dB", "deg"),
             setpoint_units=(("Hz",), ("Hz",)),
             setpoint_labels=(
-                (f"{instrument.short_name} frequency",),
-                (f"{instrument.short_name} frequency",),
+                (f"$f_\\mathrm{{{instrument.short_name}}}$",),
+                (f"$f_\\mathrm{{{instrument.short_name}}}$",),
             ),
             setpoint_names=(
                 (f"{instrument.short_name}_frequency",),
