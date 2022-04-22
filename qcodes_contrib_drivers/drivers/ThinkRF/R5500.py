@@ -1,5 +1,4 @@
 # pyrf imports
-from tkinter import N
 from pyrf.devices.thinkrf import WSA
 from pyrf.sweep_device import SweepDevice
 from pyrf.util import capture_spectrum
@@ -170,7 +169,34 @@ class R5500(Instrument):
         self.dut.ppb(4)
         self.dut.pll_reference('EXT')
 
-        sweepdev = SweepDevice(self.dut)
+        try:
+            sweepdev = SweepDevice(self.dut)
+        except TypeError:
+            self.dut.abort()
+            self.dut.flush()
+            self.dut.disconnect()
+
+            self.dut.connect(self.addr)
+            self.dut.reset()
+            self.dut.psfm_gain(self._gain)
+            self.dut.spp(1024)
+            self.dut.ppb(4)
+            self.dut.pll_reference('EXT')
+        finally:
+            try:
+                sweepdev = SweepDevice(self.dut)
+
+            except TypeError:
+                self.dut.connect(self.addr)
+                self.dut.abort()
+                self.dut.flush()
+
+                self.dut.reset()
+                self.dut.psfm_gain(self._gain)
+                self.dut.spp(1024)
+                self.dut.ppb(4)
+                self.dut.pll_reference('EXT')
+                sweepdev = SweepDevice(self.dut)
 
         sweepdev.real_device.flush_captures()
         fstart, fstop, spectrum = sweepdev.capture_power_spectrum(fstart=fstart,
@@ -212,9 +238,11 @@ class R5500(Instrument):
         self._average = average
 
     def get_rbw( self ):
+        #TODO : update rbw from device
         return self._rbw
 
     def set_rbw(self, rbw):
+        #TODO : inject rbw to device
         self._rbw = rbw
 
     def get_rfe_mode( self ):
