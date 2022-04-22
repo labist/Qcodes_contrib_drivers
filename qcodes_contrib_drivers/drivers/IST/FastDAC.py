@@ -75,7 +75,8 @@ class FastDAC(Instrument):
 
 		self.ser = serial.Serial()
 		self.ser.port = self._interface
-		self.ser.baudrate = 10000000
+		self.ser.baudrate = 10000000 
+		#self.ser.baudrate = 9600 #10000000 (this was the default, don't know why. is it binary?) aph
 		self.ser.bytesize = serial.EIGHTBITS  # number of bits per bytes
 		self.ser.parity = serial.PARITY_ODD  # set parity check: no parity
 		self.ser.stopbits = serial.STOPBITS_ONE  # number of stop bits
