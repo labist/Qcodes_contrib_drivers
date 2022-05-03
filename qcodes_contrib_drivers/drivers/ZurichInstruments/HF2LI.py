@@ -110,15 +110,16 @@ class HF2LI(Instrument):
             set_cmd=self._set_phase,
             vals=vals.Numbers(-180,180)
         )
-        self.add_parameter(
-            name='time_constant',
-            label='Time constant',
-            unit='s',
-            get_cmd=self._get_time_constant,
-            get_parser=float,
-            set_cmd=self._set_time_constant,
-            vals=vals.Numbers()
-        )  
+        # self.add_parameter( #duplicate with timeconstant?
+        #     name='time_constant',
+        #     label='Time constant',
+        #     unit='s',
+        #     get_cmd=self._get_time_constant,
+        #     get_parser=float,
+        #     set_cmd=self._set_time_constant,
+        #     vals=vals.Numbers()
+        # )  
+        self.osc=0 # set_frequency will set this oscillator
         self.add_parameter(
             name='frequency',
             label='Frequency',
@@ -135,6 +136,16 @@ class HF2LI(Instrument):
             get_parser=float,
             set_cmd=self._set_sigout_range,
             vals=vals.Enum(0.01, 0.1, 1, 10)
+        )
+         
+        self.add_parameter(
+            name='fine_amp',
+            label='Fine Sweep Amplitude',
+            unit='V',
+            get_cmd=self._get_sigout_range,
+            get_parser=float,
+            set_cmd=self._set_sigout_range,
+            vals=vals.Numbers(0.0001, 1)
         )
 
         self.add_parameter(
@@ -277,7 +288,7 @@ class HF2LI(Instrument):
 
         self._bits = 8
         self.add_parameter( 'psd_points', 
-            units = '',
+            unit = '',
             label = 'Points',
             set_cmd = self._set_points,
             get_cmd = lambda : 2**self._bits
@@ -366,7 +377,7 @@ class HF2LI(Instrument):
         data = processor()
 
         data = np.mean( data, axis=0 )
-        bw = self.rate() / self.psd_points()
+        bw = self.rate() / (self.psd_points()-1)
         data = data / bw
         # return values
         return data
@@ -524,6 +535,7 @@ class HF2LI(Instrument):
             zoomfft.set("absolute", 1) # Return absolute frequencies instead of relative to 0.
             zoomfft.set("bit", self._bits ) # The number of lines is 2**bits.
             zoomfft.set("loopcount", self.averages() )
+            self.daq_module.set('spectrum/autobandwidth', 1) # automatically set bandwidth
             # self.daq_module.set('grid/repetitions', 50)
             path = "/%s/demods/%d/sample" % (self.dev_id, self.demod)
             zoomfft.subscribe(path)
@@ -558,9 +570,15 @@ class HF2LI(Instrument):
         self.daq.unsubscribe("*")
         return data
 
-    def readout(self):
+    def readout(self, poll_length : Optional[float] = 0.1 ):
+        """ record self.demod
+        Args:
+            poll_length: length of time in seconds to record for
+        Returns:
+            X, Y, t as np arrays
+        """
         path = f'/{self.dev_id}/demods/{self.demod}/sample'
-        data = self._get_data()
+        data = self._get_data( poll_length=poll_length )
         sample = data[path]
         X = sample['x']
         Y = sample['y']
@@ -700,7 +718,7 @@ class HF2LI(Instrument):
         return self.daq.getDouble(path)
 
     def _set_frequency(self, freq) -> float:
-        osc_index = 0
+        osc_index = self.osc
         return self.daq.set([["/%s/oscs/%d/freq" % (self.dev_id, osc_index), freq]])
 
     def sample(self) -> dict:
