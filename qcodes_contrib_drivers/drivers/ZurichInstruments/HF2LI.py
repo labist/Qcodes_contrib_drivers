@@ -39,11 +39,16 @@ class HF2LI(Instrument):
         auxouts: Dict of the form {output: index},
             where output is a key of HF2LI.OUTPUT_MAPPING, for example {"X": 0, "Y": 3}
             to use the instrument as a lockin amplifier in X-Y mode with auxout channels 0 and 3.
+        sigout2mixer: mapping from sigout to mixers. For default HF2LI {0:6, 1:7}
         num_sigout_mixer_channels: Number of mixer channels to enable on the sigouts. Default: 1.
     """
     OUTPUT_MAPPING = {-1: 'manual', 0: 'X', 1: 'Y', 2: 'R', 3: 'Theta'}
     def __init__(self, name: str, device: str, demod: int, sigout: int,
-        auxouts: Dict[str, int], num_sigout_mixer_channels: int=1, **kwargs) -> None:
+            auxouts: Dict[str, int], 
+            sigout2mixer : Dict[ int, int ]={0:6, 1:7},
+            num_sigout_mixer_channels: int=1, 
+            **kwargs) -> None:
+
         super().__init__(name, **kwargs)
         instr = zhinst.utils.create_api_session(device, 1 )#, 
             #required_devtype='HF2LI') #initializes the instrument
@@ -52,7 +57,8 @@ class HF2LI(Instrument):
         self.sigout = sigout
         self.auxouts = auxouts
         log.info(f'Successfully connected to {name}.')
-        
+        self.sigout2mixer = sigout2mixer
+
         for ch in self.auxouts:
             self.add_parameter(
                 name=ch,
@@ -138,16 +144,6 @@ class HF2LI(Instrument):
             vals=vals.Enum(0.01, 0.1, 1, 10)
         )
          
-        self.add_parameter(
-            name='fine_amp',
-            label='Fine Sweep Amplitude',
-            unit='V',
-            get_cmd=self._get_sigout_range,
-            get_parser=float,
-            set_cmd=self._set_sigout_range,
-            vals=vals.Numbers(0.0001, 1)
-        )
-
         self.add_parameter(
             name='sigout_offset',
             label='Signal output offset',
@@ -294,13 +290,14 @@ class HF2LI(Instrument):
             get_cmd = lambda : 2**self._bits
         )
 
-        for i in range(6, num_sigout_mixer_channels):
+        for output, mixer_channel in sigout2mixer.items():
+        # for i in range(6, num_sigout_mixer_channels):
             self.add_parameter(
-                name=f'sigout_enable{i}',
-                label=f'Signal output mixer {i} enable',
-                get_cmd=lambda mixer_channel=i: self._get_sigout_enable(mixer_channel),
+                name=f'sigout_enable{mixer_channel}',
+                label=f'Signal output mixer {mixer_channel} enable',
+                get_cmd=lambda : self._get_sigout_enable(mixer_channel, output),
                 get_parser=float,
-                set_cmd=lambda amp, mixer_channel=i: self._set_sigout_enable(mixer_channel, amp),
+                set_cmd=lambda amp : self._set_sigout_enable(mixer_channel, output, amp),
                 vals=vals.Enum(0,1,2,3),
                 docstring="""\
                 0: Channel off (unconditionally)
@@ -310,12 +307,12 @@ class HF2LI(Instrument):
                 """
             )
             self.add_parameter(
-                name=f'sigout_amplitude{i}',
-                label=f'Signal output mixer {i} amplitude',
+                name=f'sigout_amplitude{mixer_channel}',
+                label=f'Signal output mixer {mixer_channel} amplitude',
                 unit='Gain',
-                get_cmd=lambda mixer_channel=i: self._get_sigout_amplitude(mixer_channel),
+                get_cmd=lambda : self._get_sigout_amplitude(mixer_channel, output),
                 get_parser=float,
-                set_cmd=lambda amp, mixer_channel=i: self._set_sigout_amplitude(mixer_channel, amp),
+                set_cmd=lambda amp : self._set_sigout_amplitude(mixer_channel, output, amp),
                 vals=vals.Numbers(-1, 1),
                 docstring='Multiply by sigout_range to get actual output voltage.'
             )
@@ -361,7 +358,9 @@ class HF2LI(Instrument):
             values = (self.samples[param])*180/np.pi
         else :
             # detect which node we are sweeping with
-            amplitude = self._get_sigout_amplitude(self.sigout+6) / ( 2 * np.sqrt(2) ) # normalization factor for vpp 2x fudge
+            osc = self.osc
+            mixer = self.sigout2mixer[osc]
+            amplitude = self._get_sigout_amplitude( mixer, osc ) / ( 2 * np.sqrt(2) ) # normalization factor for vpp 2x fudge
             values = 20 * np.log10( self.samples[param]/amplitude )
 
         return values
@@ -498,6 +497,7 @@ class HF2LI(Instrument):
         sweeper = self.daq.sweep()
         #self.snapshot(update=True)
         #sweeper = self.sweeper
+        sweeper.set('gridnode', f'oscs/{self.osc}/freq')
         sweeper.set('scan', 0) ### Sequenctial sweep
         sweeper.set("bandwidthcontrol", 0) ### Bandwidth control: Auto
         #sweeper.set('maxbandwidth', 100) ### Max demodulation bandwidth
@@ -659,12 +659,16 @@ class HF2LI(Instrument):
         path = f'/{self.dev_id}/demods/{self.demod}/timeconstant/'
         self.daq.setDouble(path, tc)
 
-    def _get_sigout_range(self) -> float:
-        path = f'/{self.dev_id}/sigouts/{self.sigout}/range/'
+    def _get_sigout_range(self, sigout=None ) -> float:
+        if sigout is None :
+            sigout = self.sigout
+        path = f'/{self.dev_id}/sigouts/{sigout}/range/'
         return self.daq.getDouble(path)
 
-    def _set_sigout_range(self, rng: float) -> None:
-        path = f'/{self.dev_id}/sigouts/{self.sigout}/range/'
+    def _set_sigout_range(self, rng: float, sigout=None ) -> None:
+        if sigout is None :
+            sigout = self.sigout       
+        path = f'/{self.dev_id}/sigouts/{sigout}/range/'
         self.daq.setDouble(path, rng)
     
     def _set_dc_range(self, rng: float) -> None:
@@ -695,22 +699,22 @@ class HF2LI(Instrument):
         range = self._get_sigout_range()
         return self.daq.setDouble(path, offset/range)
 
-    def _get_sigout_amplitude(self, mixer_channel: int) -> float:
-        path = f'/{self.dev_id}/sigouts/{self.sigout}/amplitudes/{mixer_channel}/'
-        range = self._get_sigout_range()
+    def _get_sigout_amplitude(self, mixer_channel: int, sigout:int ) -> float:
+        path = f'/{self.dev_id}/sigouts/{sigout}/amplitudes/{mixer_channel}/'
+        range = self._get_sigout_range(sigout=sigout)
         return self.daq.getDouble(path)*range
 
-    def _set_sigout_amplitude(self, mixer_channel: int, amp: float) -> None:
-        path = f'/{self.dev_id}/sigouts/{self.sigout}/amplitudes/{mixer_channel}/'
-        range = self._get_sigout_range()
+    def _set_sigout_amplitude(self, mixer_channel: int, sigout:int, amp: float) -> None:
+        path = f'/{self.dev_id}/sigouts/{sigout}/amplitudes/{mixer_channel}/'
+        range = self._get_sigout_range(sigout=sigout)
         return self.daq.setDouble(path, amp/range)
 
-    def _get_sigout_enable(self, mixer_channel: int) -> int:
-        path = f'/{self.dev_id}/sigouts/{self.sigout}/enables/{mixer_channel}/'
+    def _get_sigout_enable(self, mixer_channel: int, sigout: int ) -> int:
+        path = f'/{self.dev_id}/sigouts/{sigout}/enables/{mixer_channel}/'
         return self.daq.getInt(path)
 
-    def _set_sigout_enable(self, mixer_channel: int, val: int) -> None:
-        path = f'/{self.dev_id}/sigouts/{self.sigout}/enables/{mixer_channel}/'
+    def _set_sigout_enable(self, mixer_channel: int, sigout: int, val: int) -> None:
+        path = f'/{self.dev_id}/sigouts/{sigout}/enables/{mixer_channel}/'
         self.daq.setInt(path, val)
 
     def _get_frequency(self) -> float:
