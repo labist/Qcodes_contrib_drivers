@@ -376,7 +376,7 @@ class HF2LI(Instrument):
         data = processor()
 
         data = np.mean( data, axis=0 )
-        bw = self.rate() / (self.psd_points()-1)
+        bw = self.rate() / self.psd_points()
         data = data / bw
         # return values
         return data
