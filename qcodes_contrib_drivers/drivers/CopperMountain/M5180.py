@@ -74,6 +74,7 @@ class FrequencySweepMagPhase(MultiParameter):
             npts (int): number of points
         """
         f = tuple(np.linspace(int(start), int(stop), num=npts))
+        f = np.array( f )
         self.setpoints = ((f,), (f,))
         self.shapes = ((npts,), (npts,))
 
@@ -344,7 +345,7 @@ class M5180(VisaInstrument):
                            get_cmd='SENS1:FREQ:SPAN?',
                            set_cmd=self._set_span,
                            unit='Hz',
-                           vals=Numbers(min_value=100e3,
+                           vals=Numbers(min_value=0e3,
                                         max_value=18e9))
 
         self.add_parameter('npts',
