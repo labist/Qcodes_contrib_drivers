@@ -79,7 +79,8 @@ class FastDAC(Instrument):
 		self.ser.bytesize = serial.EIGHTBITS  # number of bits per bytes
 		self.ser.parity = serial.PARITY_ODD  # set parity check: no parity
 		self.ser.stopbits = serial.STOPBITS_ONE  # number of stop bits
-		self.ser.timeout = 1  # non-block read
+		self.ser.timeout = 1  # non-block read. according to the docs, timeout=0 is non-blocking.
+								# None to wait forever. x waits x seconds.
 		self.ser.xonxoff = False  # disable software flow control
 		self.ser.rtscts = False  # disable hardware (RTS/CTS) flow control
 		self.ser.dsrdtr = False  # disable hardware (DSR/DTR) flow control
@@ -333,7 +334,7 @@ class FastDAC(Instrument):
 
 		#data1 = visafunc.readn(self._vi, 2)  # OLD
 		#sleep(2)
-		#logging.info(self.ser.readline())
+		# logging.info(self.ser.readline())
 		s = 0
 		repetition = 0
 		data1 = []
