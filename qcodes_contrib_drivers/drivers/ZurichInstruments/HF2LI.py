@@ -310,9 +310,9 @@ class HF2LI(Instrument):
                 name=f'sigout_amplitude{mixer_channel}',
                 label=f'Signal output mixer {mixer_channel} amplitude',
                 unit='Gain',
-                get_cmd=lambda : self._get_sigout_amplitude(mixer_channel, output),
+                get_cmd=partial( self._get_sigout_amplitude, mixer_channel, output ),
                 get_parser=float,
-                set_cmd=lambda amp : self._set_sigout_amplitude(mixer_channel, output, amp),
+                set_cmd=partial( self._set_sigout_amplitude, mixer_channel, output ),
                 vals=vals.Numbers(-1, 1),
                 docstring='Multiply by sigout_range to get actual output voltage.'
             )
@@ -481,8 +481,9 @@ class HF2LI(Instrument):
 
     def _get_theta(self):
         path = f'/{self.dev_id}/demods/{self.demod}/sample/'
-        theta = np.arctan(self.daq.getSample(path)['y']/self.daq.getSample(path)['x'])*180/np.pi
-        return theta
+        sample = self.daq.getSample(path)
+        cmplx = sample['x'] + 1j*sample['y']
+        return np.angle(cmplx)*180/np.pi
 
     def bw3db( self ) :
         """ Return 3dB bandwidth of self.demod
