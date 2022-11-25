@@ -498,6 +498,7 @@ class HF2LI(Instrument):
         sweeper = self.daq.sweep()
         #self.snapshot(update=True)
         #sweeper = self.sweeper
+        sweeper.set("device", self.dev_id)
         sweeper.set('gridnode', f'oscs/{self.osc}/freq')
         sweeper.set('scan', 0) ### Sequenctial sweep
         sweeper.set("bandwidthcontrol", 0) ### Bandwidth control: Auto
