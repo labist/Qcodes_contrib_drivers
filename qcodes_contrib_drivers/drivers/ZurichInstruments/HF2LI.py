@@ -313,7 +313,7 @@ class HF2LI(Instrument):
                 get_cmd=partial( self._get_sigout_amplitude, mixer_channel, output ),
                 get_parser=float,
                 set_cmd=partial( self._set_sigout_amplitude, mixer_channel, output ),
-                vals=vals.Numbers(-1, 1),
+                vals=vals.Numbers(-10, 10),
                 docstring='Multiply by sigout_range to get actual output voltage.'
             )
 
