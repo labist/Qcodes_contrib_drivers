@@ -222,6 +222,25 @@ class USB_SA124B(VisaInstrument):
                         set_cmd=":SENSe:ROSC:SOURce {}",
                         vals=Enum('INT', 'EXT', 'OUT') )
 
+        self.add_parameter('dev_isactive',
+                        unit='',
+                        label='Device Active',
+                        get_cmd=":SYST:DEV:ACT?" )
+
+        self.add_parameter('dev_list',
+                        unit='',
+                        label='Device List',
+                        get_cmd=":SYST:DEV:LIST?" )
+        
+        self.add_parameter('connect',
+                        unit='',
+                        label='Device Connect',
+                        get_cmd=":SYST:DEV:CON?",
+                        set_cmd=":SYST:DEV:CON? {}",
+                        get_parser=str )
+
+
+
     def clear( self ) :
         ''' clear the trace
         '''
