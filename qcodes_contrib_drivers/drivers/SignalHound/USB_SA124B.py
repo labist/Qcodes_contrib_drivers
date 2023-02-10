@@ -215,6 +215,13 @@ class USB_SA124B(VisaInstrument):
                 set_cmd=":SENSe:CHPower:WIDTH {}",
                 get_parser=float )
 
+        self.add_parameter('ref_osc_source',
+                        unit='',
+                        label='Reference Oscillator',
+                        get_cmd=":SENSe:ROSC:SOURce?",
+                        set_cmd=":SENSe:ROSC:SOURce {}",
+                        vals=Enum('INT', 'EXT', 'OUT') )
+
     def clear( self ) :
         ''' clear the trace
         '''
