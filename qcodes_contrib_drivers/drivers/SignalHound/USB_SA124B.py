@@ -247,18 +247,25 @@ class USB_SA124B(VisaInstrument):
         '''
         self.write( ':TRACe:CLEar' )
 
-    def reconnect( self ) :
+    def reconnect( self, id=None ) :
         '''
-        reconnects to the device
+        reconnects to the device or to the provided id
+        id : integer
         '''
         self.ask(':SYST:DEV:ACT?')
-        if self.ask(':SYST:DEV:ACT?') == '0':
-            dev_id = ''
-            for i in range(5):
-                dev_id = self.ask(':SYST:DEV:LIST?')
-                if len(dev_id) > 2:
-                    break
-                sleep(0.1)
-            self.write(':SYST:DEV:CON? '+dev_id)
-            sleep(7)
+        sleep(0.1)
+        if id is None:
+            if self.ask(':SYST:DEV:ACT?') == '0':
+                dev_id = ''
+                for i in range(5):
+                    dev_id = self.ask(':SYST:DEV:LIST?')
+                    if len(dev_id) > 2:
+                        break
+                    sleep(0.1)
+                self.write(':SYST:DEV:CON? '+dev_id)
+                
+        if id is not None:
+            self.write(':SYST:DEV:CON? '+str(id))
+        sleep(7)
+        
         return self.ask(':SYST:DEV:ACT?')
