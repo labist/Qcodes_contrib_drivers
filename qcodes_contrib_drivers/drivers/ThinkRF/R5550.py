@@ -74,13 +74,18 @@ class R5550(Instrument):
                            unit='dBm', 
                            get_cmd = self.get_channel_pwr)
 
-        self._freq = self.refresh_faxis()
+        self.refresh_faxis()
 
+        self.add_parameter('points',
+                           unit='#',
+                           label='Points',
+                           get_cmd=lambda : self._freq.size )
+        
         self.add_parameter('freq_axis',
                            unit='Hz',
                            label='$f$',
                            get_cmd=lambda : self._freq,
-                           vals=Arrays(shape=(self._freq.size,)))
+                           vals=Arrays(shape=(self.points,)))
         
 
         self.add_parameter('spectrum',
@@ -89,7 +94,7 @@ class R5550(Instrument):
                    label='Noise power',
                    parameter_class=ParameterWithSetpoints,
                    get_cmd=self._get_spectrum,
-                   vals=Arrays(shape=(self._freq.size,)))
+                   vals=Arrays(shape=(self.points,)))
 
     def capture(self) :
         """ run a capture
@@ -116,7 +121,7 @@ class R5550(Instrument):
         """ refresh internal frequency axis. should be called after changing start/stop range
         """
         fstart, fstop, spectral_data = self.capture()
-        return np.linspace(fstart,fstop,len(spectral_data))
+        self._freq = np.linspace(fstart,fstop,len(spectral_data))
     
     def _get_spectrum(self):
         """ get an averaged spectrum
