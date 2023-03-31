@@ -327,7 +327,8 @@ class LdaAttenuation(LdaParameter):
                          dll_set_function=dll.fnLDA_SetAttenuationHR,
                          vals=vals,
                          unit="dB",
-                         label=label, # no scaling=self.scaling, ?, APH last merge
+                         label=label,
+                         scaling=self.scaling, # Return this back. Anton
                          **kwargs,
                          )
 
