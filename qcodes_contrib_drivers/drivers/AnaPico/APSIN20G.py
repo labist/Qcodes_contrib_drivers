@@ -12,16 +12,16 @@ class APSIN20G(VisaInstrument):
 
         self.add_parameter('output',
                            label='RF output',
-                           get_cmd=':OUTPut1?', # 1 = Single channel device
-                           set_cmd=':OUTPut {}',
+                           get_cmd='OUTPut1?', # 1 = Single channel device
+                           set_cmd='OUTPut {}',
                            val_mapping=create_on_off_val_mapping(on_val='1',
                                                                  off_val='0'))
         # our option 100k - 20G
         self.add_parameter(name='frequency',
                            label='$f_{\\mathrm{AP}}$',
                            unit='Hz',
-                           get_cmd=':FREQuency?',
-                           set_cmd=':FREQuency {:.3f}',
+                           get_cmd='FREQuency?',
+                           set_cmd='FREQuency {:.3f}',
                            get_parser=float,
                            vals=vals.Numbers(100e3, 20e9))
         
@@ -37,8 +37,8 @@ class APSIN20G(VisaInstrument):
         self.add_parameter(name='phase',
                            label='$\\phi_{\\mathrm{AP}}$',
                            unit='rad',
-                           get_cmd=':PHASe?',
-                           set_cmd=':PHASe {:.9f}',
+                           get_cmd='PHASe?',
+                           set_cmd='PHASe {:.9f}',
                            get_parser=float,
                            vals=vals.Numbers(0, 2*np.pi))
 
@@ -46,7 +46,7 @@ class APSIN20G(VisaInstrument):
         self.add_parameter(name='phase_deg',
                            label='$\\phi_{\\mathrm{AP}}$',
                            unit='deg',
-                           get_cmd=':PHASe?',
+                           get_cmd='PHASe?',
                            set_cmd=lambda ph:
                                self.write_raw(f':PHASe {ph / 180 * np.pi:.9f}'),
                            get_parser=lambda ph:
@@ -55,8 +55,8 @@ class APSIN20G(VisaInstrument):
 
         self.add_parameter('display_enabled',
                            label='Display Enabled',
-                           get_cmd=':DISPlay:ENABle?',
-                           set_cmd=':DISPlay:ENABle {}',
+                           get_cmd='DISPlay:ENABle?',
+                           set_cmd='DISPlay:ENABle {}',
                            val_mapping=create_on_off_val_mapping(on_val='1',
                                                                  off_val='0'))
         
@@ -74,6 +74,12 @@ class APSIN20G(VisaInstrument):
                            get_parser=float,
                            vals=vals.Numbers(1e6, 250e6))
         
+        self.add_parameter('ref_osc_output',
+                           label='Reference Oscillator Output',
+                           get_cmd='ROSCillator:OUTPut?',
+                           set_cmd='ROSCillator:OUTPut {}',
+                           val_mapping=create_on_off_val_mapping(on_val='1',
+                                                                 off_val='0'))
         # Frequency of the external reference AnaPico outputs
         self.add_parameter('ref_osc_output_freq',
                            label='Reference Oscillator Output Frequency',
