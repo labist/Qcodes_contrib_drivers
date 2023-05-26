@@ -1,15 +1,59 @@
 #%%
 import numpy as np
 from qcodes import Instrument, ParameterWithSetpoints
-from qcodes.utils.validators import Arrays
-from pyrf.devices.thinkrf import WSA
+from qcodes.utils.validators import Arrays, Enum
+from pyrf.devices.thinkrf import WSA as _WSA
 from pyrf.sweep_device import SweepDevice
 from pyrf.numpy_util import calculate_channel_power
+from pyrf.connectors.base import sync_async
+
+class WSA(_WSA) :
+    """ WSA with bug fix on scpiget/psfm_gain
+    """
+
+    def scpiget(self, query:str, timeout=8) -> str:
+        """ scpi query, handle bitstring and trailing carriage return
+        Args:
+            query: scpi-compatible query 
+            timeout:  the wait time (in seconds) for response, passed on to super()
+        Returns:
+            result
+        """
+        result = super().scpiget(query, timeout)
+        return result.rstrip()
+    
+    def psfm_gain(self, gain=None):
+        """
+        This command sets or queries one of the Pre-Select Filter Modules's (PSFM) gain stages.
+
+        :param str gain: sets the gain value to 'high', 'medium', 'low', or *None* to query
+        :returns: the RF gain value if *None* is used
+
+        Usage:
+            dut.psfm_gain('HIGH')
+        """
+        if self.properties.HAS_PSFM_GAIN:
+            GAIN_STATE = {('1', '1'): 'high',
+                          ('1', '0'): 'medium',
+                          ('0', '0'): 'low'}
+            GAIN_SET = {v: k for k, v in list(GAIN_STATE.items())}
+
+            if gain is None:
+                gain1 = self.scpiget(":INP:GAIN? 1").decode()
+                gain2 = self.scpiget(":INP:GAIN? 2").decode()
+                gain = GAIN_STATE[(gain1[0], gain2[0])]
+            else:
+                state = GAIN_SET[gain.lower()]
+                self.scpiset(f":INPUT:GAIN 1 {state[0]}\n")
+                self.scpiset(f":INPUT:GAIN 2 {state[1]}\n")
+
+        return gain
 
 class R5550(Instrument):
     """ R5550 insturment class. Wraps the capture_power_spectrum method provided by thinkrf
     """
-    def __init__(self, name, address, start=1e6, stop=10e9, averages=1, rfe='SH', rbw=400e3, attenuator=0 ):
+    def __init__(self, name, address, start=1e6, stop=10e9, averages=1, rfe='SH', rbw=400e3, 
+                attenuator=0, gain='low' ):
         """
         Create R5550
         Args:
@@ -21,6 +65,7 @@ class R5550(Instrument):
             rfe: one of SH, SHN, ..
             rbw: resolution bandwidth in Hz
             attenuator: attenuator setting in dB
+            gain: gain block value
         """
 
         super().__init__(name=name)
@@ -87,6 +132,15 @@ class R5550(Instrument):
                            get_cmd=lambda : self._freq,
                            vals=Arrays(shape=(self.points,)))
         
+        # self._gain=00
+        self.add_parameter('gain',
+                           unit='level',
+                           label='gain block',
+                           get_cmd = self.dut.psfm_gain,
+                           set_cmd = self.dut.psfm_gain,
+                           initial_value=gain,
+                           vals=Enum('low', 'medium', 'high')
+                           )
 
         self.add_parameter('spectrum',
                    unit='dBm',
@@ -115,6 +169,7 @@ class R5550(Instrument):
         dut.connect(self.address)
         dut.request_read_perm()
         dut.configure_flattening(loaded=None)
+        self.dut = dut
         self.sd = SweepDevice(dut)
 
     def refresh_faxis(self) :
