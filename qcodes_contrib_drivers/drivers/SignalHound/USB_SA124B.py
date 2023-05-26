@@ -121,7 +121,6 @@ class USB_SA124B(VisaInstrument):
         self.add_parameter('ref_lvl',
                         label='Reference power',
                         unit='dBm',
-                        initial_value=0,
                         get_cmd=":SENSe:POWer:RLEVel?",
                         set_cmd=":SENSe:POWer:RLEVel {:f}",
                         get_parser=int )
@@ -129,7 +128,7 @@ class USB_SA124B(VisaInstrument):
         self.add_parameter('gain',
                         label='Gain',
                         unit='level',
-                        initial_value=0,
+                        initial_value=-1,
                         get_cmd=":SENSe:POWer:GAIN?",
                         set_cmd=":SENSe:POWer:GAIN {:d}",
                         get_parser=int )
@@ -137,7 +136,7 @@ class USB_SA124B(VisaInstrument):
         self.add_parameter('atten',
                         label='Attenuation',
                         unit='level',
-                        initial_value=0,
+                        initial_value=-1,
                         get_cmd=":SENSe:POWer:ATTENuation?",
                         set_cmd=":SENSe:POWer:ATTENuation {:d}",
                         get_parser=int )
@@ -145,7 +144,7 @@ class USB_SA124B(VisaInstrument):
         self.add_parameter('preamp',
                         label='Preamp',
                         unit='level',
-                        initial_value=0,
+                        initial_value=-1,
                         get_cmd=":SENSe:POWer:PREAMP?",
                         set_cmd=":SENSe:POWer:PREAMP {:d}",
                         get_parser=int )
