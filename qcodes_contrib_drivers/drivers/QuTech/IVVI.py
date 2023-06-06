@@ -27,7 +27,7 @@ class IVVI(VisaInstrument):
     A copy of this file can be found at the bottom of this file.
     '''
     
-    full_range = 4000.0
+    full_range = 4.0
     half_range = full_range / 2
     resolution = 16
     dac_quata = full_range / 2**resolution
@@ -130,7 +130,7 @@ class IVVI(VisaInstrument):
             self.add_parameter(
                 'dac{}'.format(i),
                 label='Dac {}'.format(i),
-                unit='mV',
+                unit='V',
                 get_cmd=self._gen_ch_get_func(self._get_dac, i),
                 set_cmd=self._gen_ch_set_func(self._set_dac, i),
                 vals=vals.Numbers(self.pol_num[i - 1],
