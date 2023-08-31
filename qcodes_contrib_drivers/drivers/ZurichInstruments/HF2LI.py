@@ -354,7 +354,7 @@ class HF2LI(Instrument):
         if self.auto_trigger :
             self.trigger_sweep()
 
-        if param is 'phase' :
+        if param == 'phase' :
             values = (self.samples[param])*180/np.pi
         else :
             # detect which node we are sweeping with
@@ -731,3 +731,10 @@ class HF2LI(Instrument):
         path = f'/{self.dev_id}/demods/{self.demod}/sample/'
         return self.daq.getSample(path)
         
+    def ask(self,arg) :
+        """" hacking in an ask method
+        """
+        if arg == "*IDN?" :
+            return self.dev_id
+        else :
+            raise ValueError(f"I don't understand {arg}")
