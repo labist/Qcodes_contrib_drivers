@@ -232,7 +232,7 @@ class HF2LI(Instrument):
                 unit='Hz',
                 label= 'Frequency',
                 snapshot_value=False,
-                get_cmd= lambda : self.samples['frequency'],
+                get_cmd= lambda : self.samples['grid'],
                 vals=vals.Arrays(shape=(self.sweeper_samplecount,))
             )
 
@@ -523,6 +523,7 @@ class HF2LI(Instrument):
                 print("\nSweep still not finished, forcing finish...")
                 sweeper.finish()
         data = sweeper.read(True)
+        self.blob = data
         self.samples = data[path][0][0]
         sweeper.unsubscribe(path) ### Unsubscribe from the signal path
 
