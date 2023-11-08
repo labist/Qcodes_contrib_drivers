@@ -328,7 +328,7 @@ class M5180(VisaInstrument):
                            get_cmd='SENS1:FREQ:SPAN?',
                            set_cmd=self._set_span,
                            unit='Hz',
-                           vals=Numbers(min_value=1,
+                           vals=Numbers(min_value=0,
                                         max_value=18e9-1))
 
         self.add_parameter('npts',
