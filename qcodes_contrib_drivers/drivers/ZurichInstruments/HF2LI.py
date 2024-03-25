@@ -495,9 +495,9 @@ class HF2LI(Instrument):
         return np.sqrt(2**(1/(o))-1)/tc / ( 2 * np.pi )
 
     def trigger_sweep(self):
-        sweeper = self.daq.sweep()
+        # sweeper = self.daq.sweep()
         #self.snapshot(update=True)
-        #sweeper = self.sweeper
+        sweeper = self.sweeper
         sweeper.set("device", self.dev_id)
         sweeper.set('gridnode', f'oscs/{self.osc}/freq')
         sweeper.set('scan', 0) ### Sequenctial sweep
@@ -523,7 +523,6 @@ class HF2LI(Instrument):
                 print("\nSweep still not finished, forcing finish...")
                 sweeper.finish()
         data = sweeper.read(True)
-        self.blob = data
         self.samples = data[path][0][0]
         sweeper.unsubscribe(path) ### Unsubscribe from the signal path
 
