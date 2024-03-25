@@ -13,7 +13,6 @@ import numpy as np
 import zhinst.utils
 import qcodes as qc
 from qcodes.instrument.base import Instrument
-from qcodes.instrument import InstrumentChannel
 import qcodes.utils.validators as vals
 
 from qcodes.instrument.parameter import ParameterWithSetpoints, Parameter
@@ -21,59 +20,8 @@ from qcodes.instrument.parameter import ParameterWithSetpoints, Parameter
 from qcodes.dataset.measurements import Measurement, res_type, DataSaver
 from qcodes.instrument.specialized_parameters import ElapsedTimeParameter
 
-class HF2LIDemod(InstrumentChannel):
-    """
-    HF2LI demod
-    """
-    def __init__(self, parent: Instrument, name: str, demod : str) -> None:
-        """
-        Args:
-            parent: The Instrument instance to which the channel is
-                to be attached (HF2LI).
-            name: The 'colloquial' name of the channel
-            demod: name for ZI to look up
-        """
-
-        # if channel not in ["smua", "smub"]:
-        #     raise ValueError('channel must be either "smub" or "smua"')
-
-        super().__init__(parent, name)
-        # self.model = self._parent.model
-        single_values = (('x', 'Demodulated x', 'V'),
-                    ('y', 'Demodulated y', 'V') )
-        
-        self.demod = demod
-        self.dev_id = self.parent.dev_id
-        self.daq = self.parent.daq
-
-        for name, unit, label in single_values :
-            self.add_parameter( f'{name}',
-                    unit=unit,
-                    label=label,
-                    get_cmd = partial( self._single_get, name )
-            )
-
-        self.add_parameter(
-                name=f'theta',
-                label=f'Demodulated theta'+ str(self.demod),
-                unit='deg',
-                get_cmd= self._get_theta,
-                get_parser=float
-            )
-        
-    def _single_get(self, name):
-        path = f'/{self.dev_id}/demods/{self.demod}/sample/'
-        return self.daq.getSample(path)[name][0]
-    
-    def _get_theta(self):
-        path = f'/{self.dev_id}/demods/{self.demod}/sample/'
-        sample = self.daq.getSample(path)
-        cmplx = sample['x'] + 1j*sample['y']
-        return np.angle(cmplx)*180/np.pi
-
 class HF2LI(Instrument):
-    """
-    Qcodes driver for Zurich Instruments HF2LI lockin amplifier.
+    """Qcodes driver for Zurich Instruments HF2LI lockin amplifier.
 
     This driver is meant to emulate a single-channel lockin amplifier,
     so one instance has a single demodulator, a single sigout channel,
@@ -218,15 +166,15 @@ class HF2LI(Instrument):
         #     docstring='Multiply by sigout_range to get actual offset voltage.'
         # )
 
-        # single_values = (('x', 'Demodulated x', 'V'), DONE
-        #             ('y', 'Demodulated y', 'V') )
+        single_values = (('x', 'Demodulated x', 'V'),
+                    ('y', 'Demodulated y', 'V') )
 
-        # for name, unit, label in single_values :
-        #     self.add_parameter( f'demod_{name}',
-        #             unit=unit,
-        #             label=label,
-        #             get_cmd = partial( self._single_get, name )
-        #     )
+        for name, unit, label in single_values :
+            self.add_parameter( f'demod_{name}',
+                    unit=unit,
+                    label=label,
+                    get_cmd = partial( self._single_get, name )
+            )
 
         self.add_parameter(
                 name=f'demod_theta',
@@ -368,11 +316,6 @@ class HF2LI(Instrument):
                 vals=vals.Numbers(-10, 10),
                 docstring='Multiply by sigout_range to get actual output voltage.'
             )
-
-        for d in ['0','1']:
-            d_name = f'demod_{d}'
-            demod = HF2LIDemod(self, d_name, d)
-            self.add_submodule(d_name, demod)
 
     def _spectrum_freq_length(self):
         #return self.daq_module.get('grid/cols')['grid']['cols'][0]-1
