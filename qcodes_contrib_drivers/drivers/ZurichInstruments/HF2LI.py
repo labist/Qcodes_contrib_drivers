@@ -40,7 +40,7 @@ class HF2LIDemod(InstrumentChannel):
         self.daq = self.parent.daq
         # self.model = self._parent.model
         
-        if int(demod) in range(6): # x, y, theta only for first 5 demods 
+        if int(demod) in range(6): # x, y, theta only for first 6 demods 
             single_values = (('x', 'Demodulated x', 'V'),
                         ('y', 'Demodulated y', 'V') )
             
@@ -135,6 +135,13 @@ class HF2LIDemod(InstrumentChannel):
         )
 
         self.add_parameter(
+            name = 'sigout',
+            label = 'Sigout Index',
+            get_cmd = self._get_sigout,
+            vals = vals.Numbers(0,1)
+        )
+
+        self.add_parameter(
             name='frequency',
             label='Frequency',
             unit='Hz',
@@ -143,7 +150,60 @@ class HF2LIDemod(InstrumentChannel):
             get_parser=float
         ) 
 
+        self.add_parameter(
+            name='sigout_range',
+            label='Signal output range',
+            unit='V',
+            get_cmd=self._get_sigout_range,
+            get_parser=float,
+            set_cmd=self._set_sigout_range,
+            vals=vals.Enum(0.01, 0.1, 1, 10)
+        )
+
+        self.add_parameter(
+                name='sigout_offset',
+                label='Signal output offset',
+                unit='V',
+                snapshot_value=True,
+                set_cmd=self._set_sigout_offset,
+                get_cmd=self._get_sigout_offset,
+                vals=vals.Numbers(-1, 1),
+                docstring='Multiply by sigout_range to get actual offset voltage.'
+            )    
         
+        self.add_parameter(
+                name= 'sigout_amplitude',
+                label= 'Signal output mixer amplitude',
+                unit='Gain',
+                get_cmd=partial( self._get_sigout_amplitude ),
+                get_parser=float,
+                set_cmd=partial( self._set_sigout_amplitude ),
+                vals=vals.Numbers(-10, 10),
+                docstring='Multiply by sigout_range to get actual output voltage.'
+            )
+        
+        self.add_parameter(
+                name = 'sigout_enable',
+                label = 'On/off for sigout sine wave',
+                get_cmd = partial(self._get_sigout_enable),
+                set_cmd = partial(self._set_sigout_enable),
+                vals=vals.Enum(0,1,2,3),
+                docstring="""\
+                Sine wave on/off
+                0: Channel off (unconditionally)
+                1: Channel on (unconditionally)
+                2: Channel off (will be turned off on next change of sign from negative to positive)
+                3: Channel on (will be turned on on next change of sign from negative to positive)
+                """
+        )
+
+        self.add_parameter(
+                name = 'sigout_on', 
+                label = 'on/off for sigout',
+                get_cmd = partial(self._get_sigout_on),
+                set_cmd = partial(self._set_sigout_on),
+                vals = vals.Numbers(0,1)
+        )
 
     def _get_frequency(self) -> float:
         """
@@ -159,6 +219,9 @@ class HF2LIDemod(InstrumentChannel):
         """
         osc_index = self.osc()
         return self.daq.set([["/%s/oscs/%d/freq" % (self.dev_id, osc_index), freq]])
+
+    def _get_sigout(self):
+        return self.osc()
 
     def _get_osc(self):
         if self.demod in ['6','7']:
@@ -177,7 +240,7 @@ class HF2LIDemod(InstrumentChannel):
 
     def _single_get(self, name):
         """
-        get a parameter. only works for demods 0-5.
+        get a parameter (used for x and y). only works for demods 0-5.
         """
         path = f'/{self.dev_id}/demods/{self.demod}/sample/'
         return self.daq.getSample(path)[name][0]
@@ -200,7 +263,7 @@ class HF2LIDemod(InstrumentChannel):
         self.daq.setDouble(path, phase)
 
     def _get_demod_param( self, param ) :
-        """ get demod parameter
+        """ get demod parameter. used for timeconstant, order, and rate
         Args:
             param: string parameter name. eg timeconstant\
         Returns:
@@ -225,6 +288,58 @@ class HF2LIDemod(InstrumentChannel):
         """
         return self.sweeper.get( name )[name][0]
     
+    def _get_sigout_range(self, sigout=None ) -> float:
+        if sigout is None :
+            sigout = self.sigout
+        path = f'/{self.dev_id}/sigouts/{self.sigout()}/range/'
+        return self.daq.getDouble(path)
+
+    def _set_sigout_range(self, rng: float, sigout=None ) -> None:
+        if sigout is None :
+            sigout = self.sigout       
+        path = f'/{self.dev_id}/sigouts/{self.sigout()}/range/'
+        self.daq.setDouble(path, rng)
+
+    def _get_sigout_offset(self) -> float:
+        path = f'/{self.dev_id}/sigouts/{self.sigout()}/offset/'
+        range = self._get_sigout_range()
+        return self.daq.getDouble(path)*range
+
+    def _set_sigout_offset(self, offset: float) -> None:
+        path = f'/{self.dev_id}/sigouts/{self.sigout()}/offset/'
+        range = self._get_sigout_range()
+        return self.daq.setDouble(path, offset/range)
+    
+    def _get_sigout_amplitude(self) -> float:
+        mixer_channel = self.sigout() + 6
+        path = f'/{self.dev_id}/sigouts/{self.sigout()}/amplitudes/{mixer_channel}/'
+        range = self._get_sigout_range(sigout=self.sigout())
+        return self.daq.getDouble(path)*range
+
+    def _set_sigout_amplitude(self, amp: float) -> None:
+        mixer_channel = self.sigout() + 6
+        path = f'/{self.dev_id}/sigouts/{self.sigout()}/amplitudes/{mixer_channel}/'
+        range = self._get_sigout_range(sigout=self.sigout())
+        return self.daq.setDouble(path, amp/range)
+
+    def _get_sigout_enable(self) -> int:
+        mixer_channel = self.sigout() + 6
+        path = f'/{self.dev_id}/sigouts/{self.sigout()}/enables/{mixer_channel}/'
+        return self.daq.getInt(path)
+
+    def _set_sigout_enable(self, val: int) -> None:
+        mixer_channel = self.sigout() + 6
+        path = f'/{self.dev_id}/sigouts/{self.sigout()}/enables/{mixer_channel}/'
+        self.daq.setInt(path, val)
+
+    def _get_sigout_on(self) -> int:
+        path = f'/{self.dev_id}/sigouts/{self.sigout()}/on'
+        return self.daq.getInt(path)
+
+    def _set_sigout_on(self, val: int) -> int:
+        path = f'/{self.dev_id}/sigouts/{self.sigout()}/on'
+        self.daq.setInt(path, val)    
+    
     def _get_sweep_param(self, param, fr=True):
         if self.auto_trigger :
             self.trigger_sweep()
@@ -235,7 +350,7 @@ class HF2LIDemod(InstrumentChannel):
             # detect which node we are sweeping with
             osc = self.osc()
             mixer = self.parent.sigout2mixer[osc]
-            amplitude = self.parent._get_sigout_amplitude( mixer, osc ) / ( 2 * np.sqrt(2) ) # normalization factor for vpp 2x fudge
+            amplitude = self.sigout_amplitude() / ( 2 * np.sqrt(2) ) # normalization factor for vpp 2x fudge
             values = 20 * np.log10( self.samples[param]/amplitude )
 
         return values
@@ -255,7 +370,6 @@ class HF2LIDemod(InstrumentChannel):
         sweeper.set("stop", self.sweeper_stop())
         sweeper.set("samplecount", self.sweeper_samplecount()) 
         #sweeper.set()
-        self.timeconstant(self.timeconstant())
         sweeper.subscribe(path)
         sweeper.execute()
 
@@ -321,16 +435,7 @@ class HF2LI(Instrument):
                 get_parser=float,
                 docstring=f'Scaled and demodulated {ch} value.'
             )
-            # self.add_parameter( #NOT ADDED 
-            #     name=f'gain_{ch}',
-            #     label=f'{ch} output gain',
-            #     unit='V/Vrms',
-            #     get_cmd=lambda channel=ch: self._get_gain(channel),
-            #     get_parser=float,
-            #     set_cmd=lambda gain, channel=ch: self._set_gain(gain, channel),
-            #     vals=vals.Numbers(),
-            #     docstring=f'Gain factor for {ch}.'
-            # )
+
             self.add_parameter( #NOT MIGRATED
                 name=f'offset_{ch}',
                 label=f'{ch} output offset',
@@ -360,68 +465,13 @@ class HF2LI(Instrument):
             vals=vals.Bool()
         )
 
-        self.add_parameter(
-            name='sigout_range',
-            label='Signal output range',
-            unit='V',
-            get_cmd=self._get_sigout_range,
-            get_parser=float,
-            set_cmd=self._set_sigout_range,
-            vals=vals.Enum(0.01, 0.1, 1, 10)
-        )
-         
-        self.add_parameter(
-            name='sigout_offset',
-            label='Signal output offset',
-            unit='V',
-            snapshot_value=True,
-            set_cmd=self._set_sigout_offset,
-            get_cmd=self._get_sigout_offset,
-            vals=vals.Numbers(-1, 1),
-            docstring='Multiply by sigout_range to get actual offset voltage.'
-        )
-
-        for output, mixer_channel in sigout2mixer.items():
-        # for i in range(6, num_sigout_mixer_channels):
-            self.add_parameter(
-                name=f'sigout_enable{mixer_channel}',
-                label=f'Signal output mixer {mixer_channel} enable',
-                get_cmd=lambda : self._get_sigout_enable(mixer_channel, output),
-                get_parser=float,
-                set_cmd=lambda amp : self._set_sigout_enable(mixer_channel, output, amp),
-                vals=vals.Enum(0,1,2,3),
-                docstring="""\
-                0: Channel off (unconditionally)
-                1: Channel on (unconditionally)
-                2: Channel off (will be turned off on next change of sign from negative to positive)
-                3: Channel on (will be turned on on next change of sign from negative to positive)
-                """
-            )
-            self.add_parameter(
-                name=f'sigout_amplitude{mixer_channel}',
-                label=f'Signal output mixer {mixer_channel} amplitude',
-                unit='Gain',
-                get_cmd=partial( self._get_sigout_amplitude, mixer_channel, output ),
-                get_parser=float,
-                set_cmd=partial( self._set_sigout_amplitude, mixer_channel, output ),
-                vals=vals.Numbers(-10, 10),
-                docstring='Multiply by sigout_range to get actual output voltage.'
-            )
-
         demods = [str(i) for i in range(8)]
         for d in demods:
             d_name = f'demod_{d}'
             demod = HF2LIDemod(self, d_name, d)
             self.add_submodule(d_name, demod)
 
-    def _sweeper_get( self, name ) :
-        """ wrap zi sweeper.get
-        """
-        return self.sweeper.get( name )[name][0]
 
-    # def _single_get(self, name):
-    #     path = f'/{self.dev_id}/demods/{self.demod}/sample/'
-    #     return self.daq.getSample(path)[name][0]
     
     def _set_ext_clk(self, val):
         """ set external 10 MHz clock
@@ -435,24 +485,7 @@ class HF2LI(Instrument):
         path = f'/{self.dev_id}/system/extclk'
         val = self.daq.getInt( path )
         return bool( val )
-
-    # def _get_sweep_param(self, param, fr=True):
-    #     if self.auto_trigger :
-    #         self.trigger_sweep()
-
-    #     if param == 'phase' :
-    #         values = (self.samples[param])*180/np.pi
-    #     else :
-    #         # detect which node we are sweeping with
-    #         osc = self.osc
-    #         mixer = self.sigout2mixer[osc]
-    #         amplitude = self._get_sigout_amplitude( mixer, osc ) / ( 2 * np.sqrt(2) ) # normalization factor for vpp 2x fudge
-    #         values = 20 * np.log10( self.samples[param]/amplitude )
-
-    #     return values
-
-    
-        
+     
     def _get_gain(self, channel: str) -> float:
         path = f'/{self.dev_id}/auxouts/{self.auxouts[channel]}/scale/'
         return self.daq.getDouble(path)
@@ -484,64 +517,7 @@ class HF2LI(Instrument):
         idx = keys[list(self.OUTPUT_MAPPING.values()).index(channel)]
         self.daq.setInt(path, idx)
 
-    def _get_sigout_range(self, sigout=None ) -> float:
-        if sigout is None :
-            sigout = self.sigout
-        path = f'/{self.dev_id}/sigouts/{sigout}/range/'
-        return self.daq.getDouble(path)
-
-    def _set_sigout_range(self, rng: float, sigout=None ) -> None:
-        if sigout is None :
-            sigout = self.sigout       
-        path = f'/{self.dev_id}/sigouts/{sigout}/range/'
-        self.daq.setDouble(path, rng)
     
-    def _set_dc_range(self, rng: float) -> None:
-        path = f'/dev1792/sigouts/1/range/'
-        self.daq.setDouble(path, rng)
-
-    def _get_dc_range(self) -> float:
-        path = f'/dev1792/sigouts/1/range/'
-        return self.daq.getDouble(path)
-    
-    # def _get_dc_offset(self) -> float:
-    #     path = f'/dev1792/sigouts/1/offset/'
-    #     range = self._get_dc_range()
-    #     return self.daq.getDouble(path)*range
-
-    # def _set_dc_offset(self, offset: float) -> None:
-    #     path = f'/dev1792/sigouts/1/offset/'
-    #     range = self._get_dc_range()
-    #     return self.daq.setDouble(path, offset/range)
-
-    def _get_sigout_offset(self) -> float:
-        path = f'/{self.dev_id}/sigouts/{self.sigout}/offset/'
-        range = self._get_sigout_range()
-        return self.daq.getDouble(path)*range
-
-    def _set_sigout_offset(self, offset: float) -> None:
-        path = f'/{self.dev_id}/sigouts/{self.sigout}/offset/'
-        range = self._get_sigout_range()
-        return self.daq.setDouble(path, offset/range)
-
-    def _get_sigout_amplitude(self, mixer_channel: int, sigout:int ) -> float:
-        path = f'/{self.dev_id}/sigouts/{sigout}/amplitudes/{mixer_channel}/'
-        range = self._get_sigout_range(sigout=sigout)
-        return self.daq.getDouble(path)*range
-
-    def _set_sigout_amplitude(self, mixer_channel: int, sigout:int, amp: float) -> None:
-        path = f'/{self.dev_id}/sigouts/{sigout}/amplitudes/{mixer_channel}/'
-        range = self._get_sigout_range(sigout=sigout)
-        return self.daq.setDouble(path, amp/range)
-
-    def _get_sigout_enable(self, mixer_channel: int, sigout: int ) -> int:
-        path = f'/{self.dev_id}/sigouts/{sigout}/enables/{mixer_channel}/'
-        return self.daq.getInt(path)
-
-    def _set_sigout_enable(self, mixer_channel: int, sigout: int, val: int) -> None:
-        path = f'/{self.dev_id}/sigouts/{sigout}/enables/{mixer_channel}/'
-        self.daq.setInt(path, val)
-
     def sample(self) -> dict:
         path = f'/{self.dev_id}/demods/{self.demod}/sample/'
         return self.daq.getSample(path)
