@@ -6,9 +6,9 @@ from functools import partial
 from qcodes import VisaInstrument, InstrumentChannel, ChannelList
 from qcodes.instrument.channel import MultiChannelInstrumentParameter
 from qcodes.utils import validators as vals
-import qcodes as qc
-import ParameterHelp as ph
-import os
+from qcodes.parameters import Parameter
+from qcodes.validators import Enum
+
 log = logging.getLogger(__name__)
 
 class SP1060Exception(Exception):
@@ -56,7 +56,8 @@ class SP1060MultiChannel(MultiChannelInstrumentParameter, SP1060Reader):
     
 class SP1060Channel(InstrumentChannel, SP1060Reader):
    
-    def __init__(self, parent, name, channel, min_val=-10, max_val=10):
+    def __init__(self, parent, name, channel, min_val=-10, max_val=10, 
+                 voltage_post_delay=0.02, voltage_step=0.01):
         super().__init__(parent, name)
         
         # validate channel number
@@ -67,22 +68,31 @@ class SP1060Channel(InstrumentChannel, SP1060Reader):
         # limit voltage range
         self._volt_val = vals.Numbers(min(min_val, max_val), max(min_val, max_val))
         
-        self.add_parameter('volt',
+        self.volt: Parameter = self.add_parameter('volt',
                            label = 'C {}'.format(channel),
                            unit = 'V',
                            set_cmd = partial(self._parent._set_voltage, channel),
                            set_parser = self._vval_to_dacval,
+                           post_delay = voltage_post_delay,
+                           step = voltage_step,
                            get_cmd = partial(self._parent._read_voltage, channel),
                            vals = self._volt_val 
                            )
 
+        self.status: Parameter = self.add_parameter('Status',
+                            label = f'chan{channel} output status',
+                            set_cmd = f"{channel} {{}}",
+                            get_cmd = f'{channel} S?',
+                            vals = Enum('ON', 'OFF')
+                            )
 class SP1060(VisaInstrument, SP1060Reader):
     """
     QCoDeS driver for the Basel Precision Instruments SP1060 LNHR DAC
     https://www.baspi.ch/low-noise-high-resolution-dac
     """
     
-    def __init__(self, name, address, min_val=-10, max_val=10, baud_rate=115200, **kwargs):
+    def __init__(self, name, address, min_val=-10, max_val=10, baud_rate=115200, 
+                 voltage_post_delay=0.02, voltage_step=0.01, num_chans=24, **kwargs):
         """
         Creates an instance of the SP1060 24 channel LNHR DAC instrument.
         Args:
@@ -112,31 +122,22 @@ class SP1060(VisaInstrument, SP1060Reader):
                                SP1060Channel, 
                                snapshotable = False,
                                multichan_paramclass = SP1060MultiChannel)
-        self.num_chans = 24
+        self.num_chans = num_chans
         
         for i in range(1, 1+self.num_chans):
-            channel = SP1060Channel(self, 'chan{:1}'.format(i), i)
+            channel = SP1060Channel(self, 'chan{:1}'.format(i), i, 
+                                    voltage_post_delay=voltage_post_delay, 
+                                    voltage_step=voltage_step,
+                                    min_val = min_val,
+                                    max_val = max_val)
             channels.append(channel)
             self.add_submodule('ch{:1}'.format(i), channel)
         channels.lock()
         self.add_submodule('channels', channels)
-
-        # Safety limits for sweeping DAC voltages
-        # inter_delay: Minimum time (in seconds) between successive sets.
-        #              If the previous set was less than this, it will wait until the
-        #              condition is met. Can be set to 0 to go maximum speed with
-        #              no errors.    
-         
-        # step: max increment of parameter value.
-        #       Larger changes are broken into multiple steps this size.
-        #       When combined with delays, this acts as a ramp.
-        for chan in self.channels:
-            chan.volt.inter_delay = 0.02
-            chan.volt.step = 0.01
         
-        # switch all channels ON if still OFF
-        if 'OFF' in self.query_all():
-            self.all_on()
+        # # switch all channels ON if still OFF
+        # if 'OFF' in self.query_all():
+        #     self.all_on()
             
         self.connect_message()
         print('Current DAC output: ' +  str(self.channels[:].volt.get()))
@@ -1559,85 +1560,3 @@ class SP1060(VisaInstrument, SP1060Reader):
 
 
 
-
-
-if __name__ == '__main__':    
-    dac = SP1060('LNHR_dac3', 'TCPIP0::192.168.0.5::23::SOCKET')
-    print(dac.ch12.volt.get())
-    status_all = dac.query_all()
-    print("Query_all:")
-    print(status_all)
-    
-    # important tests
-    print("Polynomial Tests")
-    dac.set_polynomial('A', [4.938, -4.3003, 0, 20.5233])
-    print(dac.query_coefs_Polymem('A'))
-    dac.write_AWGClkPeriod("AB", 1230)
-    print('clk period: {}'.format(dac.read_AWGClkPeriod("AB")))
-
-    # scan tests
-    time.sleep(1)
-    dac.set_chan_off(10)
-    dac.set_chan_voltage(10, 0)
-    dac.set_chan_on(10)
-    dac.set_chan_bandwidth(10, "HBW")
-    data_points = dac.scan2D(dac.ch10.volt, -3, -2, 10, 0.01, dac.ch11.volt, 0, 1, 5, 0.1, [dac.ch10.volt, dac.ch11.volt])
-    print(data_points)
-
-
-    
-    # setup experiment, databases
-    db_name = "Untitled1.db" # Database name
-    sample_name = "no_samp" # Sample name
-    exp_name = "test experiment" # Experiment name
-
-    db_file_path = os.path.join(os.getcwd(), db_name)
-    qc.config.core.db_location = db_file_path
-    qc.initialise_or_create_database_at(db_file_path)
-
-    experiment = qc.load_or_create_experiment(experiment_name = exp_name,
-                                        sample_name = sample_name)
-
-    # create gate parameters for scans.
-    V12 = ph.GateParameter(
-                   dac.ch10.volt,
-                   name = "V1",
-                   unit = "V",
-                   value_range = (-10, 10),
-                   scaling = 1)
-    
-    V2 = ph.GateParameter(
-                   dac.ch2.volt,
-                   name = "V2",
-                   unit = "V",
-                   value_range = (-10, 10),
-                   scaling = 1)
-
-
-    # create station
-    station = qc.Station()
-    station.add_component(dac)
-
-    # run a scan
-    #do1d(V12, 0, -2.5, 15, 0.051)
-    
-    """
-    time.sleep(2)
-    print("Setting sinewave")
-    dac.set_newWaveform('12','0','50.0','5.0','0') # sinewave
-    time.sleep(2)
-    print("Setting Triangle")
-    dac.set_newWaveform('12','1','50.0','5.0','0') # triangle
-    time.sleep(2)
-    print("Setting Sawtooth")
-    dac.set_newWaveform('12','2','50.0','5.0','0') # sawtooth
-    """
-    # test
-    dac.set_bandwidth(10, "HBW")
-    bw = dac.get_bandwidth(1)
-    print("Bandwidth: " + bw)
-    time.sleep(1)
-    mode = dac.read_mode(12)
-    print("Mode: " + mode)
-    time.sleep(1)
-    dac.close()
