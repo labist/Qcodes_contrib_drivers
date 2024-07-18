@@ -1,4 +1,4 @@
-from typing import Optional, Sequence, Dict, Tuple, Any, Union, List
+from typing import Sequence, Any
 import time
 import pyvisa as visa
 import logging
@@ -6,9 +6,8 @@ from functools import partial
 from qcodes import VisaInstrument, InstrumentChannel, ChannelList
 from qcodes.instrument.channel import MultiChannelInstrumentParameter
 from qcodes.utils import validators as vals
-from qcodes.utils.dataset.doNd import do1d, do2d
 import qcodes as qc
-import Parameterhelp as ph
+import ParameterHelp as ph
 import os
 log = logging.getLogger(__name__)
 
@@ -1564,8 +1563,6 @@ class SP1060(VisaInstrument, SP1060Reader):
 
 if __name__ == '__main__':    
     dac = SP1060('LNHR_dac3', 'TCPIP0::192.168.0.5::23::SOCKET')
-    dac.ch1.volt.set(8)
-    dac.ch12.volt.set(0)
     print(dac.ch12.volt.get())
     status_all = dac.query_all()
     print("Query_all:")
@@ -1577,7 +1574,6 @@ if __name__ == '__main__':
     print(dac.query_coefs_Polymem('A'))
     dac.write_AWGClkPeriod("AB", 1230)
     print('clk period: {}'.format(dac.read_AWGClkPeriod("AB")))
-
 
     # scan tests
     time.sleep(1)
