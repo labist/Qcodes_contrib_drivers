@@ -7,7 +7,6 @@ from qcodes import VisaInstrument, InstrumentChannel, ChannelList
 from qcodes.instrument.channel import MultiChannelInstrumentParameter
 from qcodes.utils import validators as vals
 from qcodes.parameters import Parameter
-from qcodes.validators import Enum
 
 log = logging.getLogger(__name__)
 
@@ -79,12 +78,34 @@ class SP1060Channel(InstrumentChannel, SP1060Reader):
                            vals = self._volt_val 
                            )
 
-        self.status: Parameter = self.add_parameter('Status',
+        self.status: Parameter = self.add_parameter('status',
                             label = f'chan{channel} output status',
                             set_cmd = f"{channel} {{}}",
                             get_cmd = f'{channel} S?',
-                            vals = Enum('ON', 'OFF')
+                            vals = vals.Enum('ON', 'OFF')
                             )
+        
+        self.registered: Parameter = self.add_parameter('registered',
+                            label = f'chan{channel} registered value',
+                            unit = 'V', 
+                            get_cmd = f'{channel} VR?',
+                            get_parser = self.parent._dacval_to_vval,
+                            vals = self._volt_val
+                            )
+
+        self.bandwidth: Parameter = self.add_parameter('bandwidth',
+                            label = f'chan{channel} Bandwidth',
+                            set_cmd = f"{channel} {{}}",
+                            get_cmd = f'{channel} BW?',
+                            vals = vals.Enum('LBW', 'HBW')
+                            )
+        
+        self.mode: Parameter = self.add_parameter('mode',
+                            label = f'chan{channel} mode',
+                            get_cmd = f'{channel} M?',
+                            vals = vals.Enum('ERR', 'DAC', 'SYN', 'RMP', 'AWG', '---')
+                            )
+
 class SP1060(VisaInstrument, SP1060Reader):
     """
     QCoDeS driver for the Basel Precision Instruments SP1060 LNHR DAC
