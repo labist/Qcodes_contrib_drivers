@@ -106,6 +106,130 @@ class SP1060Channel(InstrumentChannel, SP1060Reader):
                             vals = vals.Enum('ERR', 'DAC', 'SYN', 'RMP', 'AWG', '---')
                             )
 
+class RampGenerator(InstrumentChannel):
+    def __init__(self, parent, name, generator, min_val=-10, max_val=10):
+        super().__init__(parent, name)
+
+        # first number the generators
+        self._GENERATOR_VAL = vals.Enum('A', 'B', 'C', 'D')
+        self._GENERATOR_VAL.validate(generator)
+        self._generator = generator
+
+        
+        
+        # limit voltage range
+        self._volt_val = vals.Numbers(min(min_val, max_val), max(min_val, max_val))
+
+        #then list all of their attributes
+        self.control: Parameter = self.add_parameter('control',
+                                label = f'rampgen{generator} control',
+                                set_cmd = f"C RMP-{generator} {{}}",
+                                vals = vals.Enum('START', 'HOLD', 'STOP')
+                                )
+        
+        self.state: Parameter = self.add_parameter('state',
+                                label = f'rampgen{generator} state',
+                                get_cmd = f'C RMP-{generator} S?',
+                                vals = vals.Ints(0,3)
+                                #0 is idle, 1 is ramping up, 2 is ramping down, 3 is holding
+                                )
+        
+        self.availability: Parameter = self.add_parameter('availability',
+                                label = f'rampgen{generator} availability',
+                                get_cmd = f'C RMP-{generator} AVA?',
+                                get_parser = bool,
+                                vals = vals.Bool()
+                                #str('0')==str('Selected channel is currently being used by another RAMP or AWG'), str('1')==str('Selected channel is available to be used'))
+                                #returns 0 when selected channel is being used by another RAMP or AWG generator
+                                )
+        
+        #add in a command to check if the selected channel is off or on with some voodoo?
+
+        self.selected_channel: Parameter = self.add_parameter('selected_channel',
+                                label = f'rampgen{generator} selected channel',
+                                set_cmd = f"C RMP-{generator} CH {{}}",
+                                get_cmd = f'C RMP-{generator} CH?',
+                                vals = vals.Ints(1,24)
+                                )
+        
+        self.starting_voltage: Parameter = self.add_parameter('starting_voltage',
+                                label = f'rampgen{generator} starting voltage',
+                                unit = 'V',
+                                set_cmd = f"C RMP-{generator} STAV {{}}",
+                                get_cmd = f'C RMP-{generator} STAV?',
+                                vals = vals.Numbers(-10, 10),
+                                #vals = vals.MultiTypeAnd(vals.Numbers(-10.000000, 10.000000), vals.PermissiveMultiples(.0000012))
+                                ###vals = np.arange(-10.000000, 10.0000012, .0000012)
+                                )
+        
+        self.stopping_voltage: Parameter = self.add_parameter('stopping_voltage',
+                                label = f'rampgen{generator} stopping voltage',
+                                set_cmd = f"C RMP-{generator} STOV {{}}",
+                                get_cmd = f'C RMP-{generator} STOV?',
+                                vals = vals.Numbers(-10, 10)
+                                ###vals = np.arange(-10.000000, 10.0000012, .0000012)
+                                #step size given by internal voltage resolution
+                                )
+
+        self.time: Parameter = self.add_parameter('time',
+                                label = f'rampgen{generator} time',
+                                unit = 's',
+                                set_cmd = f"C RMP-{generator} RT {{}}",
+                                get_cmd = f'C RMP-{generator} RT?',
+                                vals = vals.Numbers(0.05, 1000000)
+                                ###vals = np.arange(0.05, 1000000, 0.005)
+                                #step size given by ramp generator's internal clock
+                                )
+
+        self.shape: Parameter = self.add_parameter('shape',
+                                label = f'{name} shape',
+                                set_cmd = f"C RMP-{generator} RS {{}}",
+                                get_cmd = f'C RMP-{generator} RS?',
+                                vals = vals.Enum(0,1)
+                                #0 is only start to stop volt, 1 is start to stop back to start
+                                )
+        
+        self.cycles: Parameter = self.add_parameter('cycles',
+                                label = f'rampgen{generator} cycles',
+                                set_cmd = f"C RMP-{generator} CS {{}}",
+                                get_cmd = f'C RMP-{generator} CS?',
+                                vals = vals.Ints(0, 4000000000)
+                                #selecting 0 runs until stopped by the user
+                                )
+        
+        self.set_mode: Parameter = self.add_parameter('set_mode',
+                                label = f'rampgen{generator} set mode',
+                                set_cmd = f"C RMP-{generator} STEP {{}}",
+                                get_cmd = f'C RMP-{generator} STEP?',
+                                vals = vals.Enum(0,1)
+                                #0 is selecting ramp, 1 is selecting step
+                                )
+        
+        self.cycles_completed: Parameter = self.add_parameter('cycles_completed',
+                                label = f'rampgen{generator} cycles completed',
+                                get_cmd = f'C RMP-{generator} CD?',
+                                vals = vals.Ints(0, 4000000000)
+                                )
+        
+        self.steps_completed: Parameter = self.add_parameter('steps_completed',
+                                label = f'rampgen{generator} steps completed',
+                                get_cmd = f'C RMP-{generator} SD?',
+                                vals = vals.Ints(0, 4000000000)
+                                )
+        
+        self.step_value: Parameter = self.add_parameter('step_value',
+                                label = f'rampgen{generator} step value',
+                                get_cmd = f'C RMP-{generator} SSV?',
+                                vals = vals.Numbers(-10, 10)
+                                ###vals = ??? same issue with range of numbers as voltages
+                                )
+        
+        self.steps_per_cycle: Parameter = self.add_parameter('steps_per_cycle',
+                                label = f'rampgen{generator} steps per cycle',
+                                get_cmd = f'C RMP-{generator} ST?',
+                                vals = vals.Ints(10, 200000000)
+                                )
+        
 class SP1060(VisaInstrument, SP1060Reader):
     """
     QCoDeS driver for the Basel Precision Instruments SP1060 LNHR DAC
@@ -156,6 +280,47 @@ class SP1060(VisaInstrument, SP1060Reader):
         channels.lock()
         self.add_submodule('channels', channels)
         
+
+        #create ramp generators
+        # (???) self.generators = GeneratorList()
+        
+        generators = ChannelList(self,
+                                      "Generators",
+                                      RampGenerator,
+                                      snapshotable = False,
+                                      multichan_paramclass = None
+                                      )
+        
+        ramp_gens = ('A', 'B', 'C', 'D')
+        for gen in ramp_gens:
+            generator = RampGenerator(self, 'rampgen_{:1}'.format(gen), gen)
+            generators.append(generator)
+            self.add_submodule('rampgen_{:1}'.format(gen), generator)
+        generators.lock()
+        self.add_submodule('ramp_generators', generators)
+
+        
+        #telling if the channel is off to thus block the voltage flow...somehow
+        """
+        for j in range(0, 4):
+            genchan = 'self.ramp' + f'{letters[j]}' + '.selected_channel()'
+
+            for i in range(1, num_chans + 1):    
+                chanon = 'self.ch' + f'{i}' + '.status()'
+
+                if chanon  == 'OFF' and print(genchan) == str(i):
+                    return('Selected channel is currently off, voltage will not be sent by the RAMP generator')
+                else:
+                    pass
+        
+        #add in a for loop with j to make specific? but idk still
+        babushka = generator.selected_channel()
+        babayaga = channel.status()
+        if babushka == vals.Ints(1,24) and babayaga == 'OFF' and :
+        """
+
+
+
         # # switch all channels ON if still OFF
         # if 'OFF' in self.query_all():
         #     self.all_on()
@@ -1581,3 +1746,5 @@ class SP1060(VisaInstrument, SP1060Reader):
 
 
 
+
+# %%
