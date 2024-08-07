@@ -1,12 +1,14 @@
-from typing import Sequence, Any
 import time
 import pyvisa as visa
+import warnings
 import logging
 from functools import partial
+from typing import Sequence, Any
 from qcodes import VisaInstrument, InstrumentChannel, ChannelList
 from qcodes.instrument.channel import MultiChannelInstrumentParameter
 from qcodes.utils import validators as vals
 from qcodes.parameters import Parameter
+
 
 log = logging.getLogger(__name__)
 
@@ -37,6 +39,19 @@ class SP1060Reader(object):
         except:
             pass
 
+
+   
+       
+        
+    #(parser for state)
+
+
+    #def (parser for shape)
+
+
+    #def (parser for mode)
+
+   
 
 class SP1060MultiChannel(MultiChannelInstrumentParameter, SP1060Reader):
     def __init__(self, channels:Sequence[InstrumentChannel], param_name: str, *args: Any, **kwargs: Any):
@@ -105,13 +120,94 @@ class SP1060Channel(InstrumentChannel, SP1060Reader):
                             get_cmd = f'{channel} M?',
                             vals = vals.Enum('ERR', 'DAC', 'SYN', 'RMP', 'AWG', '---')
                             )
+    
+    """    honestly leave as is
+    def _mode_parser(self, modeval):
+        valdict = {'ERR':'Error',
+                   'DAC':'Converted',
+                   'SYN':'Registered Nominal, DAC values are registered and apllied once SYNC signal is received',
+                   'RMP':'RAMP',
+                   'AWG':'AWG',
+                   '---':'BlockedChannel not available (board likely reserved for AWG), writing not allowed'
+                   }
+        return valdict[modeval]
+    """
 
-class RampGenerator(InstrumentChannel):
-    def __init__(self, parent, name, generator, min_val=-10, max_val=10):
+class RampGenerator(InstrumentChannel, SP1060Reader):
+    
+    """
+     Defines class of Ramp generators
+    
+     Defined here is the general class for ramp generators
+     to have all of their necessary commands as attributes
+     to be called later within the SP1060 class. This way,
+     one can just do dac.ramp[A/B/C/D].[attribute name]
+     to call each command.
+
+     Attributes:
+        control : str
+            Takes in a string to start, stop, or hold a ramp
+            generator
+        
+        state : str
+            Outputs whether the ramp gen is idle, ramping up,
+            ramping down, or holding
+        
+        ava : boolean
+            Returns if the selected channel for the ramp is
+            available (returns False if another generator is
+            currently using the channel)
+
+        selchan : int
+            Set/get the channel to receive the ramp generator's
+            signal. Not restricted to either lower or higher board
+        
+        start : float
+            Set/get the starting voltage
+        
+        stop : float
+            Set/get the ending voltage (either peak or stopping)
+
+        period : float
+            Set/get the time to complete one cycle in seconds
+
+        shape : str
+            Set/get the shape of a cycle, either sawtooth or triangle
+
+        cycles : int
+            Set/get the  number of cycles to run. If 0 cycles is
+            selected, the ramp generator will run infinitely unless
+            told to stop
+
+        mode : str
+            Set/get the mode of the ramp generator, either ramp mode
+            or step mode (step mode is really only used for 2D-scans)
+
+        cycles_done : int
+            Returns the cycles completed by the ramp generator. Retains
+            value after ramp generator stops
+
+        steps_done : int
+            Returns the steps completed by the ramp generator so far
+            in a single cycle. Does not retain its value after the
+            ramp generator starts a new cycle or finishes all of its
+            programmed cycles
+
+        step : float
+            Returns the step value of the slope as internally
+            calculated with the set period, starting/ending voltage,
+            and shape
+
+        spc : int
+            Returns the steps per cycle as internally calculated
+
+    """
+    
+    def __init__(self, parent, name, generator, min_val=-10, max_val=10, num_chans = 24):
         super().__init__(parent, name)
 
-        # first number the generators
-        self._GENERATOR_VAL = vals.Enum('A', 'B', 'C', 'D')
+        # first allow the numbering of the generators
+        self._GENERATOR_VAL = vals.Enum('a', 'b', 'c', 'd')
         self._GENERATOR_VAL.validate(generator)
         self._generator = generator
 
@@ -122,114 +218,571 @@ class RampGenerator(InstrumentChannel):
 
         #then list all of their attributes
         self.control: Parameter = self.add_parameter('control',
-                                label = f'rampgen{generator} control',
-                                set_cmd = f"C RMP-{generator} {{}}",
+                                label = f'{name} control',
+                                set_cmd = self._set_control,
                                 vals = vals.Enum('START', 'HOLD', 'STOP')
                                 )
         
         self.state: Parameter = self.add_parameter('state',
-                                label = f'rampgen{generator} state',
+                                label = f'{name} state',
                                 get_cmd = f'C RMP-{generator} S?',
-                                vals = vals.Ints(0,3)
-                                #0 is idle, 1 is ramping up, 2 is ramping down, 3 is holding
+                                get_parser = self._state_get_parser
                                 )
         
-        self.availability: Parameter = self.add_parameter('availability',
-                                label = f'rampgen{generator} availability',
+        self.ava: Parameter = self.add_parameter('ava',
+                                label = f'{name} ava',
                                 get_cmd = f'C RMP-{generator} AVA?',
                                 get_parser = bool,
                                 vals = vals.Bool()
-                                #str('0')==str('Selected channel is currently being used by another RAMP or AWG'), str('1')==str('Selected channel is available to be used'))
-                                #returns 0 when selected channel is being used by another RAMP or AWG generator
                                 )
         
-        #add in a command to check if the selected channel is off or on with some voodoo?
-
-        self.selected_channel: Parameter = self.add_parameter('selected_channel',
-                                label = f'rampgen{generator} selected channel',
+        self.selchan: Parameter = self.add_parameter('selchan',
+                                label = f'{name} selchan',
                                 set_cmd = f"C RMP-{generator} CH {{}}",
                                 get_cmd = f'C RMP-{generator} CH?',
-                                vals = vals.Ints(1,24)
+                                get_parser = int,
+                                vals = vals.Numbers(min(1, num_chans), max(1, num_chans))
                                 )
         
-        self.starting_voltage: Parameter = self.add_parameter('starting_voltage',
-                                label = f'rampgen{generator} starting voltage',
+        self.start: Parameter = self.add_parameter('start',
+                                label = f'{name} start',
                                 unit = 'V',
                                 set_cmd = f"C RMP-{generator} STAV {{}}",
                                 get_cmd = f'C RMP-{generator} STAV?',
-                                vals = vals.Numbers(-10, 10),
-                                #vals = vals.MultiTypeAnd(vals.Numbers(-10.000000, 10.000000), vals.PermissiveMultiples(.0000012))
-                                ###vals = np.arange(-10.000000, 10.0000012, .0000012)
+                                get_parser = float,
+                                vals = self._volt_val
                                 )
         
-        self.stopping_voltage: Parameter = self.add_parameter('stopping_voltage',
-                                label = f'rampgen{generator} stopping voltage',
+        self.stop: Parameter = self.add_parameter('stop',
+                                label = f'{name} stop',
+                                unit = 'V',
                                 set_cmd = f"C RMP-{generator} STOV {{}}",
                                 get_cmd = f'C RMP-{generator} STOV?',
-                                vals = vals.Numbers(-10, 10)
-                                ###vals = np.arange(-10.000000, 10.0000012, .0000012)
-                                #step size given by internal voltage resolution
+                                get_parser = float,
+                                vals = self._volt_val
                                 )
 
-        self.time: Parameter = self.add_parameter('time',
-                                label = f'rampgen{generator} time',
+        self.period: Parameter = self.add_parameter('period',
+                                label = f'{name} period',
                                 unit = 's',
                                 set_cmd = f"C RMP-{generator} RT {{}}",
                                 get_cmd = f'C RMP-{generator} RT?',
+                                get_parser = float,
                                 vals = vals.Numbers(0.05, 1000000)
-                                ###vals = np.arange(0.05, 1000000, 0.005)
-                                #step size given by ramp generator's internal clock
                                 )
 
         self.shape: Parameter = self.add_parameter('shape',
                                 label = f'{name} shape',
                                 set_cmd = f"C RMP-{generator} RS {{}}",
                                 get_cmd = f'C RMP-{generator} RS?',
-                                vals = vals.Enum(0,1)
-                                #0 is only start to stop volt, 1 is start to stop back to start
+                                set_parser = self._shape_set_parser,
+                                get_parser = self._shape_get_parser,
+                                vals = vals.Enum('sawtooth', 'triangle')
                                 )
         
         self.cycles: Parameter = self.add_parameter('cycles',
-                                label = f'rampgen{generator} cycles',
+                                label = f'{name} cycles',
                                 set_cmd = f"C RMP-{generator} CS {{}}",
                                 get_cmd = f'C RMP-{generator} CS?',
+                                get_parser = int,
                                 vals = vals.Ints(0, 4000000000)
-                                #selecting 0 runs until stopped by the user
+                                #selecting 0 -> runs until stopped by the user
                                 )
         
-        self.set_mode: Parameter = self.add_parameter('set_mode',
-                                label = f'rampgen{generator} set mode',
+        self.mode: Parameter = self.add_parameter('mode',
+                                label = f'{name} mode',
                                 set_cmd = f"C RMP-{generator} STEP {{}}",
                                 get_cmd = f'C RMP-{generator} STEP?',
-                                vals = vals.Enum(0,1)
+                                set_parser = self._mode_set_parser,
+                                get_parser = self._mode_get_parser,
+                                vals = vals.Enum('ramp', 'step')
                                 #0 is selecting ramp, 1 is selecting step
                                 )
         
-        self.cycles_completed: Parameter = self.add_parameter('cycles_completed',
-                                label = f'rampgen{generator} cycles completed',
+        self.cycles_done: Parameter = self.add_parameter('cycles_done',
+                                label = f'{name} cycles_done',
                                 get_cmd = f'C RMP-{generator} CD?',
+                                get_parser = int,
                                 vals = vals.Ints(0, 4000000000)
                                 )
         
-        self.steps_completed: Parameter = self.add_parameter('steps_completed',
-                                label = f'rampgen{generator} steps completed',
+        self.steps_done: Parameter = self.add_parameter('steps_done',
+                                label = f'{name} steps_done',
                                 get_cmd = f'C RMP-{generator} SD?',
+                                get_parser = int,
                                 vals = vals.Ints(0, 4000000000)
                                 )
         
-        self.step_value: Parameter = self.add_parameter('step_value',
-                                label = f'rampgen{generator} step value',
+        self.step: Parameter = self.add_parameter('step',
+                                label = f'{name} step',
+                                unit = 'V',
                                 get_cmd = f'C RMP-{generator} SSV?',
+                                get_parser = float,
                                 vals = vals.Numbers(-10, 10)
-                                ###vals = ??? same issue with range of numbers as voltages
+                                #is this based on min/max value or not?
                                 )
         
-        self.steps_per_cycle: Parameter = self.add_parameter('steps_per_cycle',
-                                label = f'rampgen{generator} steps per cycle',
+        self.spc: Parameter = self.add_parameter('spc',
+                                label = f'{name} spc',
                                 get_cmd = f'C RMP-{generator} ST?',
+                                get_parser = int,
                                 vals = vals.Ints(10, 200000000)
                                 )
         
+    def _set_control(self, val):
+        """
+         Set control. Warn user if channel is not on
+        Args:
+            val: START/STOP/HOLD
+        """
+        # if channel is not on raise a warning
+        chan_num = self.selchan()
+        channel = self.parent.channels[chan_num-1]
+        if channel.status() == 'OFF':
+            #self.log.warning(f'Channel {chan_num} is off, ramping anyway.')
+            #warnings.filterwarnings('default', 'you fucking moron, you buffoon, you menso')
+            #import warnings
+            #warnings.warn("you fucking moron, you buffoon, you menso")
+            
+            print(f'{chan_num} not on, ramping anyway')
+            # self.log.warning(f'Channel {chan_num} is off, ramping anyway.')
+        self.write(f"C RMP-{self._generator} {val}")
+        
+    
+    """Various parsers for each attribute"""
+    def _state_get_parser(self, stateval):
+        naraco = {'0':' idle', '1':'rampup', '2':'rampdown', '3':'holding'}
+        return naraco[stateval]
+    
+    def _shape_set_parser(self, shapeval):
+        dict = {'sawtooth':0, 'triangle':1}
+        return dict[shapeval]
+    
+    def _shape_get_parser(self, shapeval):
+        cammie = {'0':'sawtooth', '1':'triangle'}
+        return cammie[shapeval]
+
+    def _mode_set_parser(self, modeval):
+        dict = {'ramp':0, 'step':1}
+        return dict[modeval]
+    
+    def _mode_get_parser(self, modeval):
+        xof = {'0':'ramp', '1':'step'}
+        return xof[modeval]
+
+
+class AWG(InstrumentChannel, SP1060Reader):
+    def __init__(self, parent, name, arbitrary_generator, num_chans = 24):
+        super().__init__(parent, name)
+
+        # first allow the numbering of the generators
+        self._GENERATOR_VAL = vals.Enum('a', 'b', 'c', 'd')
+        self._GENERATOR_VAL.validate(arbitrary_generator)
+        self._arbitrary_generator = arbitrary_generator
+
+        #now add some attributes
+        ##### AWG functionality
+        self.block: Parameter = self.add_parameter('block',
+                                label = f'{name} block',
+                                #set_cmd = self._block_set_parser,
+                                #get_cmd = self._block_get_parser,
+                                #MANUALLY PUT IN AS AB GROUP,CHANGE TO BE GENERAL
+                                )
+
+        self.control: Parameter = self.add_parameter('control',
+                                label = f'{name} control',
+                                set_cmd = f'C AWG-{arbitrary_generator} {{}}',
+                                vals = vals.Enum('START', 'STOP')
+                                )
+        
+        self.state: Parameter = self.add_parameter('state',
+                                label = f'{name} state',
+                                get_cmd = f'C AWG-{arbitrary_generator} S?',
+                                get_parser = self._state_get_parser
+                                )
+        
+        ##AWG Cycles-Done
+        
+        self.cycle_period: Parameter = self.add_parameter('cycle_period',
+                                label = f'{name} cycle_period',
+                                unit = 's',
+                                get_cmd = f'C AWG-{arbitrary_generator} DP?',
+                                get_parser = float,
+                                vals = vals.Enum(20e-6, 1.36e8)
+                                )
+        
+        self.ava: Parameter = self.add_parameter('ava',
+                                label = f'{name} ava',
+                                get_cmd = f'C AWG-{arbitrary_generator} AVA?',
+                                get_parser = self._ava_get_parser
+                                #do boolean for?
+                                )
+        
+        self.selchan: Parameter = self.add_parameter('selchan',
+                                label = f'{name} selchan',
+                                set_cmd = f'C AWG-{arbitrary_generator} CH {{}}',
+                                get_cmd = f'C AWG-{arbitrary_generator} CH?',
+                                get_parser = int,
+                                vals = vals.Ints(1, num_chans)
+                                #FIX SO ONLY A,B CAN ACCESS 1-12, ETC
+                                )
+        
+        ##AWG-Memory Size
+        self.awgmem: Parameter = self.add_parameter('awgmem',
+                                label = f'{name} awgmem',
+                                set_cmd = f'C AWG-{arbitrary_generator} MS {{}}',
+                                get_cmd = f'C AWG-{arbitrary_generator} MS?',
+                                get_parser = int,
+                                vals = vals.Ints(2,34000)
+                                )
+        
+        self.cycles: Parameter = self.add_parameter('cycles',
+                                label = f'{name} cycles',
+                                set_cmd = f'C AWG-{arbitrary_generator} CS {{}}',
+                                get_cmd = f'C AWG-{arbitrary_generator} CS?',
+                                get_parser = int,
+                                vals = vals.Numbers(0, 4e9)
+                                )
+        
+        ##AWG External Trigger Mode
+
+        ##AWG Clock-Period
+        self.awgclock: Parameter = self.add_parameter('awgclock',
+                                label = f'{name} awgclock',
+                                unit = 'microseconds',
+                                set_cmd = f'C AWG-AB CP {{}}',
+                                get_cmd = f'C AWG-AB CP?',
+                                get_parser = int,
+                                vals = vals.Numbers(10,4e9)
+                                #MAKE GENERAL FOR EACH BOARD, PUT IN AB FOR NOW1
+                                )
+
+        ##AWG 1 MHz Clock Reference
+
+
+
+
+        ##### SWG functionality
+        self.mode: Parameter = self.add_parameter('mode',
+                                label = f'{name} mode',
+                                set_cmd = f'C SWG MODE {{}}',
+                                get_cmd = f'C SWG MODE?',
+                                set_parser = self._mode_set_parser,
+                                get_parser = self._mode_get_parser
+                                )
+        
+        self.wave: Parameter = self.add_parameter('wave',
+                                label = f'{name} wave',
+                                set_cmd = f'C SWG WF {{}}',
+                                get_cmd = f'C SWG WF?',
+                                set_parser = self._wave_set_parser,
+                                get_parser = self._wave_get_parser
+                                )
+        
+        self.freq: Parameter = self.add_parameter('freq',
+                                label = f'{name} freq',
+                                unit = 'Hz',
+                                set_cmd = f'C SWG DF {{}}',
+                                get_cmd = f'C SWG DF?',
+                                get_parser = float,
+                                vals = vals.Numbers(0.001, 10000)
+                                )
+        
+        self.clockset: Parameter = self.add_parameter('clockset',
+                                label = f'{name} clockset',
+                                set_cmd = f'C SWG ACLK {{}}',
+                                get_cmd = f'C SWG ACLK?',
+                                set_parser = self._clockset_set_parser,
+                                get_parser = self._clockset_get_parser
+                                )
+        
+        self.amp: Parameter = self.add_parameter('amp',
+                                label = f'{name} amp',
+                                unit = 'V',
+                                set_cmd = f'C SWG AMP {{}}',
+                                get_cmd = f'C SWG AMP?',
+                                get_parser = float,
+                                vals = vals.Numbers(-50, 50)
+                                )
+        
+        self.offset: Parameter = self.add_parameter('offset',
+                                label = f'{name} offset',
+                                unit = 'V',
+                                set_cmd = f'C SWG DCV {{}}',
+                                get_cmd = f'C SWG DCV?',
+                                get_parser = float,
+                                vals = vals.Numbers(-10, 10)
+                                )
+        
+        self.phase: Parameter = self.add_parameter('phase',
+                                label = f'{name} phase',
+                                unit = 'Degrees',
+                                set_cmd = f'C SWG PHA {{}}',
+                                get_cmd = f'C SWG PHA?',
+                                get_parser = float,
+                                vals = vals.Numbers(-360, 360)
+                                )
+        
+        self.pulse: Parameter = self.add_parameter('pulse',
+                                label = f'{name} pulse',
+                                unit = '%',
+                                set_cmd = f'C SWG DUC {{}}',
+                                get_cmd = f'C SWG DUC?',
+                                get_parser = float,
+                                vals = vals.Numbers(0,100)
+                                )
+        
+        ##Wave-Memory size
+        self.swgmem: Parameter = self.add_parameter('swgmem',
+                                label = f'{name} swgmem',
+                                get_cmd = f'C SWG MS?',
+                                get_parser = int,
+                                vals = vals.Ints(10, 34000)
+                                )
+
+        ##Nearests AWG-Frequency
+        self.closefreq: Parameter = self.add_parameter('closefreq',
+                                label = f'{name} closefreq',
+                                unit = 'Hz',
+                                get_cmd = f'C SWG NF?',
+                                get_parser = float,
+                                vals = vals.Numbers(0.001, 10000)
+                                )
+        
+        self.clip: Parameter = self.add_parameter('clip',
+                                label = f'{name} clip',
+                                get_cmd = f'C SWG CLP?',
+                                get_parser = self._clip_get_parser
+                                #do boolean here too?
+                                )
+        
+        ##SWG/AWG Clock-Period
+        self.swgclock: Parameter = self.add_parameter('swgclock',
+                                label = f'{name} swgclock',
+                                unit = 'microseconds',
+                                get_cmd = f'C SWG CP?',
+                                get_parser = int,
+                                vals = vals.Ints(10, 4000000000)
+                                )
+        
+        self.selwavemem: Parameter = self.add_parameter('selwavemem',
+                                label = f'{name} selwavemem',
+                                set_cmd = f'C SWG WMEM {{}}',
+                                get_cmd = f'C SWG WMEM?',
+                                set_parser = self._selwavemem_set_parser,
+                                get_parser = self._selwavemem_get_parser
+                                )
+
+        self.selfunc: Parameter = self.add_parameter('selfunc',
+                                label = f'{name} selfunc',
+                                set_cmd = f'C SWG WFUN {{}}',
+                                get_cmd = f'C SWG WFUN?',
+                                set_parser = self._selfunc_set_parser,
+                                get_parser = self._selfunc_get_parser
+                                )
+
+        ##No Linearization / Linearization
+        self.lin: Parameter = self.add_parameter('lin',
+                                label = f'{name} lin',
+                                set_cmd = f'C SWG LIN {{}}',
+                                get_cmd = f'C SWG LIN?',
+                                set_parser = self._lin_set_parser,
+                                get_parser = self._lin_get_parser
+                                )
+
+        self.apply: Parameter = self.add_parameter('apply',
+                                label = f'{name} apply',
+                                set_cmd = f'C SWG APPLY'
+                                )
+        
+        """
+        ### Wave Memory Functionality
+        self.wmsize: Parameter = self.add_parameter('wmsize',
+                                label = f'{name} wmsize',
+                                get_cmd = f'C WAV-{}'
+                                )
+
+        self.wmclear:
+
+        self.wmsave:
+
+        self.wmlin: 
+
+        self.wmtoawg:
+
+        self.wmbusy: 
+
+        """
+
+
+
+        
+
+    
+    ### AWG functionality parsers
+    """
+    def _block_set_parser(self, val1, val2):
+        val1, val2 = input(self.set_cmd()).split()
+        dict1 = {'lower':'AB', 'higher':'CD'}
+        self.write(f'C AWG-' + {dict1[val1]} + ' ONLY ' + val2)
+
+
+        
+    def _block_get_parser(self, blockval):
+        dict = {'0':'No restrictions on other channels',
+                '1':'Other channels on board cannot be used'}
+        return dict[blockval]
+    """
+
+    def _state_get_parser(self, stateval):
+        dict = {'0':'Idle',
+                '1':'Running'
+                }
+        return dict[stateval]
+    
+    def _ava_get_parser(self, avaval):
+        dict = {'0':'false',
+                '1':'true'
+                }
+        return dict[avaval]
+    
+    
+    
+    ### SWG functionality parsers
+    def _mode_set_parser(self, modeval):
+        dict = {'generate':0, 'saved':1}
+        return dict[modeval]
+    
+    def _mode_get_parser(self, modeval):
+        dict = {'0':'generate',
+                '1':'saved'
+                }
+        return dict[modeval]
+
+    def _wave_set_parser(self, waveval):
+        dict = {'sine':0,
+                'triangle':1,
+                'sawtooth':2,
+                'ramp':3,
+                'pulse':4,
+                'fixedgaussian':5,
+                'randomgaussian':6,
+                'dc':7
+                }
+        return dict[waveval]
+    
+    def _wave_get_parser(self, waveval):
+        dict = {'0':'sine',
+                '1':'triangle',
+                '2':'sawtooth',
+                '3':'ramp',
+                '4':'pulse',
+                '5':'fixedgaussian',
+                '6':'randomgaussian',
+                '7':'dc'
+                }
+        return dict[waveval]
+    
+    def _clockset_set_parser(self, clockval):
+        dict = {'keep':0,
+                'adapt':1
+                }
+        return dict[clockval]
+    
+    def _clockset_get_parser(self, clockval):
+        dict = {'0':'keep',
+                '1':'adapt'
+                }
+        return dict[clockval]
+    
+    def _clip_get_parser(self, clipval):
+        dict = {'0':'False',
+                '1':'True'
+                }
+        return dict[clipval]
+    
+    def _selwavemem_set_parser(self, selwavememval):
+        dict = {'a':0,
+                'b':1,
+                'c':2,
+                'd':3
+                }
+        return dict[selwavememval]
+    
+    def _selwavemem_get_parser(self, selwavememval):
+        dict = {'0':'a',
+                '1':'b',
+                '2':'c',
+                '3':'d'
+                }
+        return dict[selwavememval]
+    
+    def _selfunc_set_parser(self, selfuncval):
+        dict = {'copy':0,
+                'startappend':1,
+                'endappend':2,
+                'startsum':3,
+                'endsum':4,
+                'startmult':5,
+                'endmult':6,
+                'startdivide':7,
+                'enddivide':8
+                }
+        return dict[selfuncval]
+    
+    def _selfunc_get_parser(self, selfuncval):
+        webster = {'0':'copy',
+                   '1':'startappend',
+                   '2':'endappend',
+                   '3':'startsum',
+                   '4':'endsum',
+                   '5':'startmult',
+                   '6':'endmult',
+                   '7':'startdivide',
+                   '8':'enddivide'
+                   }
+        return webster[selfuncval]
+    
+    def _lin_set_parser(self, linval):
+        dict = {'false':0, 'true':1}
+        return dict[linval]
+
+    def _lin_get_parser(self, linval):
+        dict = {'0':'false', '1':'true'}
+        return dict[linval]
+    
+    """### Wave Memory functionality parsers"""
+
+
+
+
+"""
+#attempting to add subclasses to differentiate easily
+class SWGFunctionality(AWG):
+    def __init__(self, parent, name):
+        super().__init__(parent, name)
+
+        self.wave: Parameter = self.add_parameter('wave',
+                                label = f'{name} wave',
+                                set_cmd = f'C SWG WF {{}}',
+                                get_cmd = f'C SWG WF?',
+                                get_parser = self._wave_parser
+                                )
+
+
+    def _wave_parser(self, waveval):
+        thisisadict = {'0':'Sine selected',
+                       '1':'Triangle selected',
+                       '2':'Sawtooth selected',
+                       '3':'Ramp selected',
+                       '4':'Pulse selected',
+                       '5':'Gaussian noise (Fixed seed) selected',
+                       '6':'Gaussian Noise (Random seed) selected',
+                       '7':'DC-Voltage only selected'}
+        return thisisadict[waveval]
+
+"""
+
 class SP1060(VisaInstrument, SP1060Reader):
     """
     QCoDeS driver for the Basel Precision Instruments SP1060 LNHR DAC
@@ -237,7 +790,7 @@ class SP1060(VisaInstrument, SP1060Reader):
     """
     
     def __init__(self, name, address, min_val=-10, max_val=10, baud_rate=115200, 
-                 voltage_post_delay=0.02, voltage_step=0.01, num_chans=24, **kwargs):
+                 voltage_post_delay=0.02, voltage_step=0.01, num_chans=24,**kwargs):
         """
         Creates an instance of the SP1060 24 channel LNHR DAC instrument.
         Args:
@@ -280,10 +833,8 @@ class SP1060(VisaInstrument, SP1060Reader):
         channels.lock()
         self.add_submodule('channels', channels)
         
-
-        #create ramp generators
-        # (???) self.generators = GeneratorList()
         
+        #create ramp generators
         generators = ChannelList(self,
                                       "Generators",
                                       RampGenerator,
@@ -291,34 +842,41 @@ class SP1060(VisaInstrument, SP1060Reader):
                                       multichan_paramclass = None
                                       )
         
-        ramp_gens = ('A', 'B', 'C', 'D')
-        for gen in ramp_gens:
-            generator = RampGenerator(self, 'rampgen_{:1}'.format(gen), gen)
+        ramp_gens = ('a', 'b', 'c', 'd')
+
+        for i in range(0,4):
+            generator = RampGenerator(self, 'ramp{:1}'.format(ramp_gens[i]), ramp_gens[i])
             generators.append(generator)
-            self.add_submodule('rampgen_{:1}'.format(gen), generator)
+            self.add_submodule('ramp{:1}'.format(ramp_gens[i]), generator)
         generators.lock()
         self.add_submodule('ramp_generators', generators)
 
+
+        #create AWG generators
+        arbitrary_generators = ChannelList(self,
+                                      "Arbitrary_Generators",
+                                      AWG,
+                                      snapshotable = False,
+                                      multichan_paramclass = None
+                                      )
         
-        #telling if the channel is off to thus block the voltage flow...somehow
+        aw_gens = ('a', 'b', 'c', 'd')
+
+        for i in range (0, int(num_chans/6)):
+            arbitrary_generator = AWG(self, 'awg{:1}'.format(aw_gens[i]), aw_gens[i])
+            arbitrary_generators.append(arbitrary_generator)
+            self.add_submodule('awg{:1}'.format(aw_gens[i]), arbitrary_generator)
+        arbitrary_generators.lock()
+        self.add_submodule('aw_generators', arbitrary_generators)
+
+
+
+
+
+
         """
-        for j in range(0, 4):
-            genchan = 'self.ramp' + f'{letters[j]}' + '.selected_channel()'
-
-            for i in range(1, num_chans + 1):    
-                chanon = 'self.ch' + f'{i}' + '.status()'
-
-                if chanon  == 'OFF' and print(genchan) == str(i):
-                    return('Selected channel is currently off, voltage will not be sent by the RAMP generator')
-                else:
-                    pass
-        
-        #add in a for loop with j to make specific? but idk still
-        babushka = generator.selected_channel()
-        babayaga = channel.status()
-        if babushka == vals.Ints(1,24) and babayaga == 'OFF' and :
+        Below this is our poor swiss coder's work 
         """
-
 
 
         # # switch all channels ON if still OFF
@@ -422,6 +980,7 @@ class SP1060(VisaInstrument, SP1060Reader):
                         ('BasPI', 'LNHR DAC SP1060', SN, FW)))
                         
 
+#reference this
     def set_newWaveform(self, channel = '12', waveform = '0', frequency = '100.0', 
                         amplitude = '5.0', wavemem = '0'):
         """
