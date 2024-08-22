@@ -1,3 +1,21 @@
+"""Driver for the Basel LNHR DAC II SP1060
+
+Using Python to control the Basel SP1060 with
+parameters to record values simply. Individual
+channels, ramp generators, and AWGs are defined
+as their own classes to then be iterated within
+the SP1060 overall instrument class to create a
+heirarchy within the driver. Each class (excluding
+SP1060) then has its appropriate commands as
+attributes.
+
+Channels = ClassSP1060Channel()
+Ramp Gens = ClassRampGenerator()
+AWGs = ClassAWG()
+SP1060 = ClassSP1060()
+"""
+
+
 import time
 import pyvisa as visa
 import warnings
@@ -51,7 +69,6 @@ class SP1060Reader(object):
 
     #def (parser for mode)
 
-   
 
 class SP1060MultiChannel(MultiChannelInstrumentParameter, SP1060Reader):
     def __init__(self, channels:Sequence[InstrumentChannel], param_name: str, *args: Any, **kwargs: Any):
@@ -66,12 +83,34 @@ class SP1060MultiChannel(MultiChannelInstrumentParameter, SP1060Reader):
         def set_raw(self, value):
             for chan in self._channels:
                 chan.volt.set(value)
-            
     
+
 class SP1060Channel(InstrumentChannel, SP1060Reader):
-   
+    """
+    Defining the general characteristics of each channel
+
+    Defines the general commands/aspects of each channel
+    as attributes to then define the individual channels
+    as part of the overall SP1060 class.
+
+    Attributes:
+        volt: Set/Get voltage output
+        status: Set/Get the channel being on/off
+        registered: Get the registered voltage output (???)
+        bw: Set/Get the bandwidth of the channel (low or high)
+        mode: Get any errors/settings for the channel
+    """
     def __init__(self, parent, name, channel, min_val=-10, max_val=10, 
                  voltage_post_delay=0.02, voltage_step=0.01):
+        """Initializes the channel based on a given voltage range
+
+        Args:
+            volt: Float number to set/get voltage output
+            status: String to set/get the channel being on/off
+            registered: Float number to get the registered voltage output (???)
+            bw: String to set/get  bandwidth of the channel (low or high)
+            mode: String to get any errors/settings for the channel
+        """
         super().__init__(parent, name)
         
         # validate channel number
@@ -82,6 +121,7 @@ class SP1060Channel(InstrumentChannel, SP1060Reader):
         # limit voltage range
         self._volt_val = vals.Numbers(min(min_val, max_val), max(min_val, max_val))
         
+        """clarify difference with registered"""
         self.volt: Parameter = self.add_parameter('volt',
                            label = 'C {}'.format(channel),
                            unit = 'V',
@@ -94,116 +134,96 @@ class SP1060Channel(InstrumentChannel, SP1060Reader):
                            )
 
         self.status: Parameter = self.add_parameter('status',
-                            label = f'chan{channel} output status',
+                            label = f'chan{channel} status',
                             set_cmd = f"{channel} {{}}",
                             get_cmd = f'{channel} S?',
                             vals = vals.Enum('ON', 'OFF')
                             )
         
+        """clarify difference with volt"""
         self.registered: Parameter = self.add_parameter('registered',
-                            label = f'chan{channel} registered value',
+                            label = f'chan{channel} registered',
                             unit = 'V', 
                             get_cmd = f'{channel} VR?',
                             get_parser = self.parent._dacval_to_vval,
                             vals = self._volt_val
                             )
 
-        self.bandwidth: Parameter = self.add_parameter('bandwidth',
-                            label = f'chan{channel} Bandwidth',
+        self.bw: Parameter = self.add_parameter('bw',
+                            label = f'chan{channel} bw',
                             set_cmd = f"{channel} {{}}",
                             get_cmd = f'{channel} BW?',
                             vals = vals.Enum('LBW', 'HBW')
                             )
-        
+
         self.mode: Parameter = self.add_parameter('mode',
                             label = f'chan{channel} mode',
                             get_cmd = f'{channel} M?',
                             vals = vals.Enum('ERR', 'DAC', 'SYN', 'RMP', 'AWG', '---')
                             )
-    
-    """    honestly leave as is
-    def _mode_parser(self, modeval):
-        valdict = {'ERR':'Error',
-                   'DAC':'Converted',
-                   'SYN':'Registered Nominal, DAC values are registered and apllied once SYNC signal is received',
-                   'RMP':'RAMP',
-                   'AWG':'AWG',
-                   '---':'BlockedChannel not available (board likely reserved for AWG), writing not allowed'
-                   }
-        return valdict[modeval]
-    """
+
 
 class RampGenerator(InstrumentChannel, SP1060Reader):
     
-    """
-     Defines class of Ramp generators
+    """Defines class of Ramp generators
     
-     Defined here is the general class for ramp generators
-     to have all of their necessary commands as attributes
-     to be called later within the SP1060 class. This way,
-     one can just do dac.ramp[A/B/C/D].[attribute name]
-     to call each command.
+    Defines the general commands/aspects of the
+    ramp generators to be called later once
+    individual ones are specified within the
+    SP1060 class
 
      Attributes:
-        control : str
-            Takes in a string to start, stop, or hold a ramp
-            generator
-        
-        state : str
-            Outputs whether the ramp gen is idle, ramping up,
-            ramping down, or holding
-        
-        ava : boolean
-            Returns if the selected channel for the ramp is
-            available (returns False if another generator is
-            currently using the channel)
-
-        selchan : int
-            Set/get the channel to receive the ramp generator's
-            signal. Not restricted to either lower or higher board
-        
-        start : float
-            Set/get the starting voltage
-        
-        stop : float
-            Set/get the ending voltage (either peak or stopping)
-
-        period : float
-            Set/get the time to complete one cycle in seconds
-
-        shape : str
-            Set/get the shape of a cycle, either sawtooth or triangle
-
-        cycles : int
-            Set/get the  number of cycles to run. If 0 cycles is
-            selected, the ramp generator will run infinitely unless
-            told to stop
-
-        mode : str
-            Set/get the mode of the ramp generator, either ramp mode
-            or step mode (step mode is really only used for 2D-scans)
-
-        cycles_done : int
-            Returns the cycles completed by the ramp generator. Retains
-            value after ramp generator stops
-
-        steps_done : int
-            Returns the steps completed by the ramp generator so far
-            in a single cycle. Does not retain its value after the
-            ramp generator starts a new cycle or finishes all of its
-            programmed cycles
-
-        step : float
-            Returns the step value of the slope as internally
-            calculated with the set period, starting/ending voltage,
-            and shape
-
-        spc : int
-            Returns the steps per cycle as internally calculated
-
+        control: String to start, stop, hold a ramp gen
+        state: String to get the ramp gen being idle, ramping
+            up, ramping down, or holding
+        ava: Boolean to get if selected channel is not under
+            use by another ramp gen/AWG
+        selchan: Integer to set/get the ramp gen's output channel        
+        start: Float to set/get the starting voltage        
+        stop: Float to set/get the ending voltage
+        period: Float to set/get the time to complete one cycle (sec)
+        shape: String to set/get either a sawtooth or triangle cycle
+        cycles: Integer to set/get the cycles to run (if 0 selected,
+            will run infinitely until told to stop manually)
+        mode: String to set/get the ramp gen being in ramp or step
+            mode (step is used for 2D-Scans)
+        cycles_done: Integer to get the cycles completed by the
+            ramp gen. Retains value after full cycles completed
+        steps_done: Integer to get the steps completed by the ramp
+            gen. Does not retain value after a cycle is completed
+        step: Float to get the resolution of the slope (internally
+            calculated via period, start/stop, and shape)
+        spc: Integer value to get the internally calculated steps
+            per cycle
     """
     
     def __init__(self, parent, name, generator, min_val=-10, max_val=10, num_chans = 24):
+        """Initializes the ramp gen by a given voltage range and possible channels
+        
+        Args:
+            control: String to start, stop, hold a ramp gen
+            state: String to get the ramp gen being idle, ramping
+                up, ramping down, or holding
+            ava: Boolean to get if selected channel is not under
+                use by another ramp gen/AWG
+            selchan: Integer to set/get the ramp gen's output channel        
+            start: Float to set/get the starting voltage        
+            stop: Float to set/get the ending voltage
+            period: Float to set/get the time to complete one cycle (sec)
+            shape: String to set/get either a sawtooth or triangle cycle
+            cycles: Integer to set/get the cycles to run (if 0 selected,
+                will run infinitely until told to stop manually)
+            mode: String to set/get the ramp gen being in ramp or step
+                mode (step is used for 2D-Scans)
+            cycles_done: Integer to get the cycles completed by the
+                ramp gen. Retains value after full cycles completed
+            steps_done: Integer to get the steps completed by the ramp
+                gen. Does not retain value after a cycle is completed
+            step: Float to get the resolution of the slope (internally
+                calculated via period, start/stop, and shape)
+            spc: Integer value to get the internally calculated steps
+               per cycle
+        """
         super().__init__(parent, name)
 
         # first allow the numbering of the generators
@@ -211,8 +231,6 @@ class RampGenerator(InstrumentChannel, SP1060Reader):
         self._GENERATOR_VAL.validate(generator)
         self._generator = generator
 
-        
-        
         # limit voltage range
         self._volt_val = vals.Numbers(min(min_val, max_val), max(min_val, max_val))
 
@@ -296,7 +314,6 @@ class RampGenerator(InstrumentChannel, SP1060Reader):
                                 set_parser = self._mode_set_parser,
                                 get_parser = self._mode_get_parser,
                                 vals = vals.Enum('ramp', 'step')
-                                #0 is selecting ramp, 1 is selecting step
                                 )
         
         self.cycles_done: Parameter = self.add_parameter('cycles_done',
@@ -328,7 +345,7 @@ class RampGenerator(InstrumentChannel, SP1060Reader):
                                 get_parser = int,
                                 vals = vals.Ints(10, 200000000)
                                 )
-        
+    
     def _set_control(self, val):
         """
          Set control. Warn user if channel is not on
@@ -348,31 +365,106 @@ class RampGenerator(InstrumentChannel, SP1060Reader):
             # self.log.warning(f'Channel {chan_num} is off, ramping anyway.')
         self.write(f"C RMP-{self._generator} {val}")
         
-    
-    """Various parsers for each attribute"""
     def _state_get_parser(self, stateval):
+        """
+        Parser to get the current state of the ramp generator
+        Args:
+            val: idle, ramping up, ramping down, holding voltage
+        """
         naraco = {'0':' idle', '1':'rampup', '2':'rampdown', '3':'holding'}
         return naraco[stateval]
     
     def _shape_set_parser(self, shapeval):
+        """
+        Parser to sets the shape of the ramp
+        generator to complete in a single period
+        Args:
+            val: sawtooth, triangle
+        """
         dict = {'sawtooth':0, 'triangle':1}
         return dict[shapeval]
     
     def _shape_get_parser(self, shapeval):
+        """
+        Parser to get the shape of the ramp
+        generator to complete in a single period
+        Args:
+            val: sawtooth, triangle
+        """
         cammie = {'0':'sawtooth', '1':'triangle'}
         return cammie[shapeval]
 
     def _mode_set_parser(self, modeval):
+        """
+        Parser to set the ramp to either be
+        in ramp mode (normal ramp) or step
+        mode (used only for 2D-Scans)
+        Args:
+            val: ramp, step
+        """
         dict = {'ramp':0, 'step':1}
         return dict[modeval]
     
     def _mode_get_parser(self, modeval):
+        """
+        Parser to get the ramp either in
+        ramp mode (normal ramping) or step
+        mode (only for 2D-Scans)
+        Args:
+            val: ramp, step
+        """
         xof = {'0':'ramp', '1':'step'}
         return xof[modeval]
 
 
 class AWG(InstrumentChannel, SP1060Reader):
+    """Defines the class of AWGs
+
+    Defines the general commands/aspects of the
+    AWGs to be called later once the individual
+    ones are defined within the SP1060 class
+
+    Attributes:
+        block: String to set AWGs to either run independently
+            or stop all other non-AWG channels' activity
+        control: String to start/stop the AWG
+        state: String to get whether AWG is idling or running
+        ??? CYCLES DONE ???
+        cycle_period: Float to get the duration of one AWG cycle
+        ava: String to get whether the selected channel is
+            available for the AWG to run (false if channel is
+            in use by another AWG)
+        selchan: Integer to set/get the AWG/s output channel
+        memsize: Integer to set/get the AWG memory size
+        cycles: Integer to set/get AWG cycles to run
+        ??? EXTERNAL TRIGGER ???
+        clock: Integer to set/get the AWG clock period for
+            the upper or lower board
+        ??? 1 MHz CLOCK ???
+    """
     def __init__(self, parent, name, arbitrary_generator, num_chans = 24):
+        """
+        Initializes the AWG given the 12/24 possible channels
+
+        Args:
+            block: String to set AWGs to either run independently
+                or stop all other non-AWG channels' activity
+            control: String to start/stop the AWG
+            state: String to get whether AWG is idling or running
+            ??? CYCLES DONE ???
+            cycle_period: Float to get the duration of one AWG cycle
+            ava: String to get whether the selected channel is
+                available for the AWG to run (false if channel is
+                in use by another AWG)
+            selchan: Integer to set/get the AWG/s output channel
+            memsize: Integer to set/get the AWG memory size
+            cycles: Integer to set/get AWG cycles to run
+            ??? EXTERNAL TRIGGER ???
+            clock: Integer to set/get the AWG clock period for
+                the upper or lower board
+            ??? 1 MHz CLOCK ???
+
+        """
         super().__init__(parent, name)
 
         # first allow the numbering of the generators
@@ -384,9 +476,9 @@ class AWG(InstrumentChannel, SP1060Reader):
         ##### AWG functionality
         self.block: Parameter = self.add_parameter('block',
                                 label = f'{name} block',
-                                #set_cmd = self._block_set_parser,
-                                #get_cmd = self._block_get_parser,
-                                #MANUALLY PUT IN AS AB GROUP,CHANGE TO BE GENERAL
+                                set_cmd = self._block_set,
+                                get_cmd = self._block_get,
+                                get_parser = self._block_get_parser
                                 )
 
         self.control: Parameter = self.add_parameter('control',
@@ -426,10 +518,9 @@ class AWG(InstrumentChannel, SP1060Reader):
                                 vals = vals.Ints(1, num_chans)
                                 #FIX SO ONLY A,B CAN ACCESS 1-12, ETC
                                 )
-        
-        ##AWG-Memory Size
-        self.awgmem: Parameter = self.add_parameter('awgmem',
-                                label = f'{name} awgmem',
+
+        self.memsize: Parameter = self.add_parameter('memsize',
+                                label = f'{name} memsize',
                                 set_cmd = f'C AWG-{arbitrary_generator} MS {{}}',
                                 get_cmd = f'C AWG-{arbitrary_generator} MS?',
                                 get_parser = int,
@@ -446,23 +537,222 @@ class AWG(InstrumentChannel, SP1060Reader):
         
         ##AWG External Trigger Mode
 
-        ##AWG Clock-Period
-        self.awgclock: Parameter = self.add_parameter('awgclock',
-                                label = f'{name} awgclock',
+        self.clock: Parameter = self.add_parameter('clock',
+                                label = f'{name} clock',
                                 unit = 'microseconds',
-                                set_cmd = f'C AWG-AB CP {{}}',
-                                get_cmd = f'C AWG-AB CP?',
+                                set_cmd = self._clock_set,
+                                get_cmd = self._clock_get,
                                 get_parser = int,
                                 vals = vals.Numbers(10,4e9)
-                                #MAKE GENERAL FOR EACH BOARD, PUT IN AB FOR NOW1
                                 )
 
         ##AWG 1 MHz Clock Reference
+        
+        
+    
+    # Function Commands    
+    def _block_set(self, input):
+        """
+        Command to set whether when an AWG runs
+        it blocks all non-AWG behavior through
+        the channels on its respective board.
+        Here, setting this for one AWG alters
+        the entire board (and thus the other
+        AWG on the board)
+
+        Args:
+            board: Which board to be altered, AB
+                (lower) or CD (upper), taken from
+                the AWG specified in the command
+            val: false, true
+        """
+        letter = str(self._arbitrary_generator)
+        setdict = {'false':0, 'true':1}
+        val = setdict[input]
+        board = ''
+        if letter == 'a' or letter == 'b':
+            board = 'AB'
+        else:
+            board = 'CD'
+        self.write(f'C AWG-{board} ONLY {val}')
+    
+
+    def _block_get(self):
+        """
+        Command to get whether when running an
+        AWG blocks all non-AWG behavior on that
+        same respective board
+
+        Args:
+            letter: Which AWG and thus which board
+                is being called, taken from the
+                AWG specified in the command
+        """
+        letter = str(self._arbitrary_generator)
+        if letter == 'a' or letter == 'b':
+            return self.write(f"C AWG-AB ONLY?")
+        else:
+            return self.write(f"C AWG-CD ONLY?")
+        
+    
+    def _clock_set(self, input):
+        """
+        Command to set the clock period of a board,
+        
+        Args:
+            ?????
+        """
+        letter = str(self._arbitrary_generator)
+        board = ''
+        if letter == 'a' or letter == 'b':
+            board = 'AB'
+        else:
+            board = 'CD'
+        self.write(f'C AWG-{board} CP {input}')
+
+    def _clock_get(self):
+        """
+        ?????
+        """
+        letter = str(self._arbitrary_generator)
+        if letter == 'a' or letter == 'b':
+            return self.write(f'C AWG-AB CP?')
+        else:
+            return self.write(f'C AWG-CD CP?')
+
+    #Parsers for AWG Functionality
+    def _block_get_parser(self, input):
+        """
+        Parser to get the result of the
+        board containing the specified AWG
+        in regards to blocking non-AWG
+        activity on the board
+
+        Args:
+            val: false, true
+        """
+        dict = {'0':'false', '1':'true'}
+        return dict[input]
+
+    def _state_get_parser(self, stateval):
+        """
+        Parser to get the state of the AWG
+        Args:
+            val: Idle, Running
+        """
+        dict = {'0':'Idle',
+                '1':'Running'
+                }
+        return dict[stateval]
+    
+    def _ava_get_parser(self, avaval):
+        """
+        Parser to get the availability
+        of the selected channel
+        Args:
+            val: false, true
+        """
+        dict = {'0':'false',
+                '1':'true'
+                }
+        return dict[avaval]
 
 
+class SWG(InstrumentChannel, SP1060Reader):
+    """Defines the class of SWG functionality
+    
+    Defines the standard waveform generation commands
+    of the dac. Separate to the AWG commands in
+    structure and thus relegated to a separate class
+    to retain this structure
 
+    Attributes:
+        mode: String to set/get SWG to generate a waveform
+            from user-given aspects or produce a waveform
+            saved to WAV-S
+        wave: String to set/get the waveform to produce
+        freq: Float to set/get the frequency of the waveform
+        clockset: String to set/get the clock period to
+            generate the waveform as either the AWG clock
+            period of the board (lower or higher) or to adapt
+            to best fit the specified frequency
+        amp: Float to set/get the amplitude of the waveform.
+            Range of [-50V, 50V] to allow for unusual clipping
+            waveforms as desired, negative voltage is interpreted
+            as a phase shift of 180 degrees
+        offset: Float to set/get the DC voltage offset
+        phase: Float to set/get phase shift of the waveform (not
+            applicable for DC voltage only, Gaussian, and Ramp)
+        pulse: Float to set/get the duration of the Pulse waveform
+            when applicable. Units of percent and range of [0,100],
+            a value of 50 yields a square wave
+        size: Get the size of the user specified waveform and thus the
+            necessary memory to store/produce it
+        closefreq: Get the closest AWG frequency to the user-specified
+            frequency given the clockset value (this will be the
+            frequency outputted, if vastly different than specified
+            frequency then select 'adapt' in  clockset)
+        clip: Get if the user specified waveform exceeds the maximum
+            voltage of [-10V,10V] anywhere, returns true if so
+        clock: Get the clock period used for the standard waveform
+            generation, reflects the same clock periods as clockset
+        selwm: String to set/get the wave memory to save the user specified
+            waveform to (WAV-A/B/C/D, clock period will be saved as well)
+        selfunc: String to set/get the wave function dictating how the
+            user specified waveform will be saved to the user specified wave memory
+            (e.g. simply copied, appended to the end of the memory, etc.)
+        lin: String to set/get whether the user specified channel as
+            specified in AWG is remembered with the waveform to then
+            be utilized in AWG memory if the waveform is copied over
+            (this is also true when applying the polynomial) [???]
+    """
+    def __init__(self, parent, name, standard_wg):
+        """Initializes the SWG commands, does not require any user inputs
 
-        ##### SWG functionality
+        Args:
+            mode: String to set/get SWG to generate a waveform
+                from user-given aspects or produce a waveform
+                saved to WAV-S
+            wave: String to set/get the waveform to produce
+            freq: Float to set/get the frequency of the waveform
+            clockset: String to set/get the clock period to
+                generate the waveform as either the AWG clock
+                period of the board (lower or higher) or to adapt
+                to best fit the specified frequency
+            amp: Float to set/get the amplitude of the waveform.
+                Range of [-50V, 50V] to allow for unusual clipping
+                waveforms as desired, negative voltage is interpreted
+                as a phase shift of 180 degrees
+            offset: Float to set/get the DC voltage offset
+            phase: Float to set/get phase shift of the waveform (not
+                applicable for DC voltage only, Gaussian, and Ramp)
+            pulse: Float to set/get the duration of the Pulse waveform
+                when applicable. Units of percent and range of [0,100],
+                a value of 50 yields a square wave
+            size: Get the size of the user specified waveform and thus the
+                necessary memory to store/produce it
+            closefreq: Get the closest AWG frequency to the user-specified
+                frequency given the clockset value (this will be the
+                frequency outputted, if vastly different than specified
+                frequency then select 'adapt' in  clockset)
+            clip: Get if the user specified waveform exceeds the maximum
+                voltage of [-10V,10V] anywhere, returns true if so
+            clock: Get the clock period used for the standard waveform
+                generation, reflects the same clock periods as clockset
+            selwm: String to set/get the wave memory to save the user specified
+                waveform to (WAV-A/B/C/D, clock period will be saved as well)
+            selfunc: String to set/get the wave function dictating how the
+                user specified waveform will be saved to the user specified wave memory
+                (e.g. simply copied, appended to the end of the memory, etc.)
+            lin: String to set/get whether the user specified channel as
+                specified in AWG is remembered with the waveform to then
+                be utilized in AWG memory if the waveform is copied over
+                (this is also true when applying the polynomial) [???]
+        """
+        super().__init__(parent, name)
+        
+        #something else here?
+
         self.mode: Parameter = self.add_parameter('mode',
                                 label = f'{name} mode',
                                 set_cmd = f'C SWG MODE {{}}',
@@ -532,15 +822,13 @@ class AWG(InstrumentChannel, SP1060Reader):
                                 vals = vals.Numbers(0,100)
                                 )
         
-        ##Wave-Memory size
-        self.swgmem: Parameter = self.add_parameter('swgmem',
-                                label = f'{name} swgmem',
+        self.size: Parameter = self.add_parameter('size',
+                                label = f'{name} size',
                                 get_cmd = f'C SWG MS?',
                                 get_parser = int,
                                 vals = vals.Ints(10, 34000)
                                 )
 
-        ##Nearests AWG-Frequency
         self.closefreq: Parameter = self.add_parameter('closefreq',
                                 label = f'{name} closefreq',
                                 unit = 'Hz',
@@ -556,21 +844,20 @@ class AWG(InstrumentChannel, SP1060Reader):
                                 #do boolean here too?
                                 )
         
-        ##SWG/AWG Clock-Period
-        self.swgclock: Parameter = self.add_parameter('swgclock',
-                                label = f'{name} swgclock',
+        self.clock: Parameter = self.add_parameter('clock',
+                                label = f'{name} clock',
                                 unit = 'microseconds',
                                 get_cmd = f'C SWG CP?',
                                 get_parser = int,
                                 vals = vals.Ints(10, 4000000000)
                                 )
         
-        self.selwavemem: Parameter = self.add_parameter('selwavemem',
-                                label = f'{name} selwavemem',
+        self.selwm: Parameter = self.add_parameter('selwm',
+                                label = f'{name} selwm',
                                 set_cmd = f'C SWG WMEM {{}}',
                                 get_cmd = f'C SWG WMEM?',
-                                set_parser = self._selwavemem_set_parser,
-                                get_parser = self._selwavemem_get_parser
+                                set_parser = self._selwm_set_parser,
+                                get_parser = self._selwm_get_parser
                                 )
 
         self.selfunc: Parameter = self.add_parameter('selfunc',
@@ -581,7 +868,6 @@ class AWG(InstrumentChannel, SP1060Reader):
                                 get_parser = self._selfunc_get_parser
                                 )
 
-        ##No Linearization / Linearization
         self.lin: Parameter = self.add_parameter('lin',
                                 label = f'{name} lin',
                                 set_cmd = f'C SWG LIN {{}}',
@@ -590,76 +876,54 @@ class AWG(InstrumentChannel, SP1060Reader):
                                 get_parser = self._lin_get_parser
                                 )
 
-        self.apply: Parameter = self.add_parameter('apply',
-                                label = f'{name} apply',
-                                set_cmd = f'C SWG APPLY'
-                                )
-        
+    #Methods of the class
+    def apply(self):
         """
-        ### Wave Memory Functionality
-        self.wmsize: Parameter = self.add_parameter('wmsize',
-                                label = f'{name} wmsize',
-                                get_cmd = f'C WAV-{}'
-                                )
+        Command to actually use the user specified wave
+        function and save the user specified waveform to
+        the user specified wave memory slot. If this
+        command is not used, the waveform will not be
+        saved to any wave memory
 
-        self.wmclear:
-
-        self.wmsave:
-
-        self.wmlin: 
-
-        self.wmtoawg:
-
-        self.wmbusy: 
-
+        Args:
+            N/A
         """
+        self.write(f'C SWG APPLY')
 
-
-
-        
-
-    
-    ### AWG functionality parsers
-    """
-    def _block_set_parser(self, val1, val2):
-        val1, val2 = input(self.set_cmd()).split()
-        dict1 = {'lower':'AB', 'higher':'CD'}
-        self.write(f'C AWG-' + {dict1[val1]} + ' ONLY ' + val2)
-
-
-        
-    def _block_get_parser(self, blockval):
-        dict = {'0':'No restrictions on other channels',
-                '1':'Other channels on board cannot be used'}
-        return dict[blockval]
-    """
-
-    def _state_get_parser(self, stateval):
-        dict = {'0':'Idle',
-                '1':'Running'
-                }
-        return dict[stateval]
-    
-    def _ava_get_parser(self, avaval):
-        dict = {'0':'false',
-                '1':'true'
-                }
-        return dict[avaval]
-    
-    
-    
-    ### SWG functionality parsers
+    #Parsers for the attributes
     def _mode_set_parser(self, modeval):
+        """
+        Parser to set the user specified mode
+        of the SWG
+        
+        Args:
+            val: generate, saved
+        """
         dict = {'generate':0, 'saved':1}
         return dict[modeval]
     
     def _mode_get_parser(self, modeval):
+        """
+        Parser to get the user specified mode
+        of the SWG
+
+        Args:
+            val: generate, saved
+        """
         dict = {'0':'generate',
                 '1':'saved'
                 }
         return dict[modeval]
 
     def _wave_set_parser(self, waveval):
+        """
+        Parser to set the user specified waveform
+
+        Args:
+            val: sine, triangle, sawtooth, ramp,
+                pulse, fixedgaussian,
+                randomgaussian, dc
+        """
         dict = {'sine':0,
                 'triangle':1,
                 'sawtooth':2,
@@ -672,6 +936,14 @@ class AWG(InstrumentChannel, SP1060Reader):
         return dict[waveval]
     
     def _wave_get_parser(self, waveval):
+        """
+        Parser to get the user specified waveform
+
+        Args:
+            val: sine, triangle, sawtooth, ramp,
+                pulse, fixedgaussian,
+                randomgaussian, dc
+        """
         dict = {'0':'sine',
                 '1':'triangle',
                 '2':'sawtooth',
@@ -684,40 +956,88 @@ class AWG(InstrumentChannel, SP1060Reader):
         return dict[waveval]
     
     def _clockset_set_parser(self, clockval):
+        """
+        Parser to set the clock period to either
+        be the board's dictated period or to vary
+        to fit the user specified frequency
+
+        Args:
+            val: keep, adapt
+        """
         dict = {'keep':0,
                 'adapt':1
                 }
         return dict[clockval]
     
     def _clockset_get_parser(self, clockval):
+        """
+        Parser to get whether the clock period is
+        the board's period or to vary to fit the
+        user specified frequency
+
+        Args:
+            val: keep, adapt
+        """
         dict = {'0':'keep',
                 '1':'adapt'
                 }
         return dict[clockval]
     
     def _clip_get_parser(self, clipval):
-        dict = {'0':'False',
-                '1':'True'
+        """
+        Parser to get whether the user specified
+        waveform clips out of the [-10V,10V]
+        possible range to output
+
+        Args:
+            val: false, true
+        """
+        dict = {'0':'false',
+                '1':'true'
                 }
         return dict[clipval]
     
-    def _selwavemem_set_parser(self, selwavememval):
+    def _selwm_set_parser(self, selwmval):
+        """
+        Parser to set the selected wave memory
+        to save the user specified waveform to
+
+        Args:
+            val: a, b, c, d
+        """
         dict = {'a':0,
                 'b':1,
                 'c':2,
                 'd':3
                 }
-        return dict[selwavememval]
+        return dict[selwmval]
     
-    def _selwavemem_get_parser(self, selwavememval):
+    def _selwm_get_parser(self, selwmval):
+        """
+        Parser to get the selected wave memory
+        to save the user specified waveform to
+
+        Args:
+            val: a, b, c, d
+        """
         dict = {'0':'a',
                 '1':'b',
                 '2':'c',
                 '3':'d'
                 }
-        return dict[selwavememval]
+        return dict[selwmval]
     
     def _selfunc_set_parser(self, selfuncval):
+        """
+        Parser to set the wavefunction that dictates
+        how to save the user specified waveform to the
+        user specified wave memory
+
+        Args:
+            val: copy, startappend, endappend, startsum,
+                endsum, startmult, endmult, startdivide,
+                enddivide
+        """
         dict = {'copy':0,
                 'startappend':1,
                 'endappend':2,
@@ -731,6 +1051,16 @@ class AWG(InstrumentChannel, SP1060Reader):
         return dict[selfuncval]
     
     def _selfunc_get_parser(self, selfuncval):
+        """
+        Parser to get the wavefunction dictating how
+        to save the user specified waveform to the
+        user specified wave memory
+
+        Args:
+            val: copy, startappend, endappend, startsum,
+                endsum, startmult. endmult, startdivide,
+                enddivide
+        """
         webster = {'0':'copy',
                    '1':'startappend',
                    '2':'endappend',
@@ -744,49 +1074,142 @@ class AWG(InstrumentChannel, SP1060Reader):
         return webster[selfuncval]
     
     def _lin_set_parser(self, linval):
+        """
+        Parser to set whether to linearize
+
+        Args:
+            val: false, true
+        """
         dict = {'false':0, 'true':1}
         return dict[linval]
 
     def _lin_get_parser(self, linval):
+        """
+        Parser to get whether to linearize
+
+        Args:
+            val: false, true
+        """
         dict = {'0':'false', '1':'true'}
         return dict[linval]
-    
-    """### Wave Memory functionality parsers"""
 
 
+class WAV(InstrumentChannel, SP1060Reader):
+    """Defines the class of WAV functionality
 
+    Defines all of the commands for the wave memories,
+    including copying them to AWG memory. Defined as a
+    separate class to differentiate the four (technically
+    five) wave memories of WAV-A/B/C/D/S
 
-"""
-#attempting to add subclasses to differentiate easily
-class SWGFunctionality(AWG):
-    def __init__(self, parent, name):
+    Attributes:
+        memsize: Get the size of any wave memory, WAV-A/B/C/D/S
+            (an integer from 0 to 34000). To ensure smooth running,
+            clean unused memories
+        lin: Gets the channel used when the waveform was saved if
+            linearization was true when saved (if it was false,
+            the channel is given as 0). This thus records the
+            channel for linearization which is applied when
+            the wave memory is copied to the corresponding AWG memory (?)
+        busy: Get if the wave memory is busy. This only occurs when
+            a wave memory is copying its saved waveform to the 
+            corresponding AWG memory
+    """
+    def __init__(self, parent, name, wave_mem):
+        """Initializes the wave memory commands without any user inputs
+
+        Args:
+            memsize: Get the size of any wave memory, WAV-A/B/C/D/S
+                (an integer from 0 to 34000). To ensure smooth running,
+                clean unused memories
+            lin: Gets the channel used when the waveform was saved if
+                linearization was true when saved (if it was false,
+                the channel is given as 0). This thus records the
+                channel for linearization which is applied when
+                the wave memory is copied to the corresponding AWG memory (?)
+            busy: Get if the wave memory is busy. This only occurs when
+                a wave memory is copying its saved waveform to the 
+                corresponding AWG memory
+        """
         super().__init__(parent, name)
 
-        self.wave: Parameter = self.add_parameter('wave',
-                                label = f'{name} wave',
-                                set_cmd = f'C SWG WF {{}}',
-                                get_cmd = f'C SWG WF?',
-                                get_parser = self._wave_parser
+        # need something else here?
+
+        self._wave_mem = wave_mem
+
+        self.memsize: Parameter = self.add_parameter('memsize',
+                                label = f'{name} memsize',
+                                get_cmd = f'C WAV-{wave_mem} MS?',
+                                get_parser = int
                                 )
 
+        self.lin: Parameter = self.add_parameter('lin',
+                                label = f'{name} lin',
+                                get_cmd = f'C WAV-{wave_mem} LINCH?',
+                                get_parser = int
+                                )
 
-    def _wave_parser(self, waveval):
-        thisisadict = {'0':'Sine selected',
-                       '1':'Triangle selected',
-                       '2':'Sawtooth selected',
-                       '3':'Ramp selected',
-                       '4':'Pulse selected',
-                       '5':'Gaussian noise (Fixed seed) selected',
-                       '6':'Gaussian Noise (Random seed) selected',
-                       '7':'DC-Voltage only selected'}
-        return thisisadict[waveval]
+        self.busy: Parameter = self.add_parameter('busy',
+                                label = f'{name} busy',
+                                get_cmd = f'C WAV-{wave_mem} BUSY?',
+                                get_parser = self._busy_get_parser
+                                )
 
-"""
+    """
+    add a docstring for these probably
+    """
+    #methods
+    def clear(self):
+        """
+        Command to clear the specified wave memory
+
+        Args:
+            N/A
+        """
+        self.write(f'C WAV-{self._wave_mem} CLR')
+
+    def save(self):
+        """
+        Command to save the selected wave memory
+        to WAV-S (thus cannot be used with wms)
+
+        Args:
+            N/A
+        """
+        self.write(f'C WAV-{self._wave_mem} SAVE')
+
+    def toawg(self):
+        """
+        Command to copy the selected wave memory to the
+        corresponding AWG memory (eg WAV-A --> AWG-A)
+        and thus this command cannot be used on WAV-S
+
+        Args:
+            N/A
+        """
+        self.write(f'C WAV-{self._wave_mem} WRITE')
+
+
+
+    #parsers
+    def _busy_get_parser(self, input):
+        """
+        Parser to get whether the selected wave
+        memory is busy
+
+        Args:
+            val: idle, busy
+        """
+        dict = {'0':'idle', '1':'busy'}
+        return dict[input]
+
 
 class SP1060(VisaInstrument, SP1060Reader):
     """
     QCoDeS driver for the Basel Precision Instruments SP1060 LNHR DAC
     https://www.baspi.ch/low-noise-high-resolution-dac
+    
+    [[[add onto this?]]]
     """
     
     def __init__(self, name, address, min_val=-10, max_val=10, baud_rate=115200, 
@@ -801,6 +1224,8 @@ class SP1060(VisaInstrument, SP1060Reader):
                         panel.
             min_val (number): The minimum value in volts that can be output by the DAC.
             max_val (number): The maximum value in volts that can be output by the DAC.
+        
+        [[[add onto this?]]]
         """
         super().__init__(name, address, **kwargs)
 
@@ -815,6 +1240,7 @@ class SP1060(VisaInstrument, SP1060Reader):
         handle.read_termination = '\r\n'
 
         # Create channels
+        """probably make docstrings for each generation here"""
         channels = ChannelList(self, 
                                "Channels", 
                                SP1060Channel, 
@@ -863,12 +1289,49 @@ class SP1060(VisaInstrument, SP1060Reader):
         aw_gens = ('a', 'b', 'c', 'd')
 
         for i in range (0, int(num_chans/6)):
-            arbitrary_generator = AWG(self, 'awg{:1}'.format(aw_gens[i]), aw_gens[i])
+            arbitrary_generator = AWG(self, 'awgens{:1}'.format(aw_gens[i]), aw_gens[i])
             arbitrary_generators.append(arbitrary_generator)
             self.add_submodule('awg{:1}'.format(aw_gens[i]), arbitrary_generator)
         arbitrary_generators.lock()
         self.add_submodule('aw_generators', arbitrary_generators)
+        
 
+        
+
+
+        
+        #singular SWG?
+        standard_wgs = ChannelList(self,
+                                "Standard Waveform Generator",
+                                SWG,
+                                snapshotable = False,
+                                multichan_paramclass = None
+                                )
+        for i in range(0,1):
+            standard_wg = SWG(self, 'swgen', i)
+            standard_wgs.append(standard_wg)
+            self.add_submodule('swg', standard_wg)
+        standard_wgs.lock()
+        self.add_submodule('sw_generators', standard_wgs)
+        
+        
+        
+        
+        #make WAV memories
+        wave_mems = ChannelList(self,
+                                "Wave Memories",
+                                WAV,
+                                snapshotable = False,
+                                multichan_paramclass = None
+                                )
+        wave_mem_s = ('s', 'a', 'b', 'c', 'd')
+        for i in range (0, int(num_chans/6) + 1):
+            wave_mem = WAV(self, 'wmems{:1}'.format(wave_mem_s[i]), wave_mem_s[i])
+            wave_mems.append(wave_mem)
+            self.add_submodule('wm{:1}'.format(wave_mem_s[i]), wave_mem)
+        wave_mems.lock()
+        self.add_submodule('w_memories', wave_mems)
+        
 
 
 
@@ -1270,6 +1733,7 @@ class SP1060(VisaInstrument, SP1060Reader):
         reply = self.write('ALL M?')
         return reply.replace("\r\n","").split(';')
 
+#useful?
     """
     Query memory contents of AWG memory at address(es)
     @mem - character indicating AWG memory A/B/C/D
@@ -2302,8 +2766,6 @@ class SP1060(VisaInstrument, SP1060Reader):
             print("Mistyped")
         elif num == 5:
             print("Writing not allowed")
-
-
 
 
 # %%
