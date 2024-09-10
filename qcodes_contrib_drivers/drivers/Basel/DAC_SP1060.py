@@ -30,7 +30,7 @@ from qcodes.parameters import Parameter
 
 
 log = logging.getLogger(__name__)
-BEEP = warnings.warn('sorry son, i need to change the batteries in my smoke detector!!!')
+
 
 class SP1060Exception(Exception):
     pass
@@ -58,6 +58,7 @@ class SP1060Reader(object):
             return vval
         except:
             pass
+
 
 class SP1060MultiChannel(MultiChannelInstrumentParameter, SP1060Reader):
     def __init__(self, channels:Sequence[InstrumentChannel], param_name: str, *args: Any, **kwargs: Any):
@@ -155,7 +156,6 @@ class SP1060Channel(InstrumentChannel, SP1060Reader):
         """ set the voltage. always query it first to make sure qcodes' internal value is correct
         """
         chan = self._channel
-        self.volt()
         return self.parent.write('{:0} {:X}'.format(chan, code))
             
     def _read_voltage(self):
@@ -165,7 +165,6 @@ class SP1060Channel(InstrumentChannel, SP1060Reader):
 
 
 class RampGenerator(InstrumentChannel, SP1060Reader):
-    
     """Defines class of Ramp generators
     
     Defines the general commands/aspects of the
@@ -315,7 +314,6 @@ class RampGenerator(InstrumentChannel, SP1060Reader):
                                 get_cmd = f'C RMP-{generator} CS?',
                                 get_parser = int,
                                 vals = vals.Ints(0, 4000000000)
-                                #selecting 0 -> runs until stopped by the user
                                 )
         
         self.mode: Parameter = self.add_parameter('mode',
@@ -346,8 +344,7 @@ class RampGenerator(InstrumentChannel, SP1060Reader):
                                 unit = 'V',
                                 get_cmd = f'C RMP-{generator} SSV?',
                                 get_parser = float,
-                                vals = vals.Numbers(-10, 10)
-                                #is this based on min/max value or not?
+                                vals = self._volt_val
                                 )
         
         self.spc: Parameter = self.add_parameter('spc',
@@ -359,84 +356,26 @@ class RampGenerator(InstrumentChannel, SP1060Reader):
     
     def _set_control(self, val):
         """
-         Set control. Warn user if channel is not on
+        Set the control state of a ramp generator.
+        Prints a warning message if the selected
+        channel is not on and thus not outputting
+        the voltage. Also clears the cache to force
+        previous channel voltages to be forgotten
+        so when cycles are finished/halted the
+        channel uses this ending voltage as its
+        next starting point rather than the
+        previously set channel voltage causing a
+        jump in voltage level
         Args:
             val: START/STOP/HOLD
         """
-        # if channel is not on raise a warning
         chan_num = self.selchan()
         channel = self.parent.channels[chan_num-1]
 
-        #def _beep():
-            #warnings.warn('i think that enemy got...THE POINT', DeprecationWarning)
-
+        if val == 'START': # clear cache to avoid jumps if user sets channel voltage
+            channel.volt.cache._update_with(value=None, raw_value=None)
         if channel.status() == 'OFF':
-            #self.log.warning(f'Channel {chan_num} is off, ramping anyway.')
-            #warnings.filterwarnings('default', 'you fucking moron, you buffoon, you menso')
-            #import warnings
-            #warnings.warn("you fucking moron, you buffoon, you menso")
-            
-            # print(f'Warning: {chan_num} not on, ramping anyway')
-            #self.log.warning(f'Channel {chan_num} is off, ramping anyway.')
-
-            #with logger.console_level(logging.INFO):
-                #log.info('you fucking moron, you buffoon, you menso')
-
-            #import warnings
-            #with warnings.WarningMessage:
-                #warnings.simplefilter('ignore')
-                #warnings.warn('you fucking moron, you buffoon, you absolute mensa')
-                #warnings.showwarning('you fucking moron, you buffoon, you absolute mensa')
-                #warnings.warn_explicit('you fucking moron, you buffoon, you absolute mensa')
-
-            #warnings.formatwarning('you fucking moron, you buffoon, you absolute mensa')
-            #warnings.simplefilter('ignore')
-            #warnings.warn('you fucking moron, you buffoon, you absolute mensa')
-            #warnings.showwarning('you fucking moron, you buffoon, you absolute mensa')
-            #warnings.warn_explicit('you fucking moron, you buffoon, you absolute mensa', ResourceWarning, 'filename', 2112)
-            #raise warnings.warn_explicit('sup. im carl, thats carl, thats also carl')
-
-            #from qcodes.utils import QCoDeSDeprecationWarning
-            #warnings.showwarning('boo', QCoDeSDeprecationWarning, 'hoo', 2)
-
-            #logging.warning('i dont have a kingdom nor would i give it for anything')
-
-            #from qcodes.logger import 
-
-            #self.log.warning('you are getting very sleepy...')
-
-            #warnings.simplefilter('default')
-            #raise warnings.warn('run.', UserWarning)
-
-            #print(BEEP)
-            #return BEEP
-
-            #with warnings.catch_warnings(record=True) as w:
-                #warnings.simplefilter('always')
-                #_beep()
-                #print(w)
-            #import qcodes
-            import qcodes.utils
-            #qcodes.utils.QCoDeSDeprecationWarning
-            #warnings.simplefilter('always')
-            #qcodes.utils.issue_deprecation_warning('this mortal coil is a prison', 'unless its not', )
-
-            #the golden code:
-            #warnings.filterwarnings('error')
-            #warnings.warn('boo')
-            
-            
-            #warnings.simplefilter('always', UserWarning)
-            #warnings.warn('your mother was a hamster and your father smelt of elderberries')
-            
-            import sys
-
-            if not sys.warnoptions:
-                import warnings
-                warnings.simplefilter("always")
-                
-            warnings.warn('boo')
-
+            print(f'Warning: {chan_num} not on, ramping anyway') # print a warning if channel is not on
         self.write(f"C RMP-{self._generator} {val}")
         
     def _state_get_parser(self, stateval):
@@ -560,8 +499,8 @@ class AWG(InstrumentChannel, SP1060Reader):
 
         self.control: Parameter = self.add_parameter('control',
                                 label = f'{name} control',
-                                set_cmd = f'C AWG-{arbitrary_generator} {{}}',
-                                vals = vals.Enum('START', 'STOP')
+                                set_cmd = self._set_control,
+                                #vals = vals.Enum('START', 'STOP')
                                 )
         
         self.state: Parameter = self.add_parameter('state',
@@ -590,7 +529,6 @@ class AWG(InstrumentChannel, SP1060Reader):
                                 label = f'{name} ava',
                                 get_cmd = f'C AWG-{arbitrary_generator} AVA?',
                                 get_parser = self._ava_get_parser
-                                #do boolean for?
                                 )
         
         self.selchan: Parameter = self.add_parameter('selchan',
@@ -629,7 +567,6 @@ class AWG(InstrumentChannel, SP1060Reader):
                                 vals = vals.Numbers(10,4e9)
                                 )
 
-        ##AWG 1 MHz Clock Reference
         self.mhzclock: Parameter = self.add_parameter('mhzclock',
                                 label = f'{name} mhzclock',
                                 set_cmd = f'C AWG-1MHz {{}}',
@@ -637,18 +574,13 @@ class AWG(InstrumentChannel, SP1060Reader):
                                 set_parser = self._mhz_set_parser,
                                 get_parser = self._mhz_get_parser,
                                 )
-        
-        
     
     # Function Commands    
     def _block_set(self, input):
         """
         Command to set whether when an AWG runs
         it blocks all non-AWG behavior through
-        the channels on its respective board.
-        Here, setting this for one AWG alters
-        the entire board (and thus the other
-        AWG on the board)
+        the channels on its respective board
 
         Args:
             board: Which board to be altered, AB
@@ -665,7 +597,6 @@ class AWG(InstrumentChannel, SP1060Reader):
         else:
             board = 'CD'
         self.write(f'C AWG-{board} ONLY {val}')
-    
 
     def _block_get(self):
         """
@@ -684,13 +615,14 @@ class AWG(InstrumentChannel, SP1060Reader):
         else:
             return self.write(f"C AWG-CD ONLY?")
         
-    
     def _clock_set(self, input):
         """
         Command to set the clock period of a board,
         
         Args:
-            ?????
+            letter: which AWG is being referenced,
+                thus giving the board to be referenced
+            val: clock value to be set
         """
         letter = str(self._arbitrary_generator)
         board = ''
@@ -702,13 +634,30 @@ class AWG(InstrumentChannel, SP1060Reader):
 
     def _clock_get(self):
         """
-        ?????
+        Command to get the clock period of a board
+
+        Args:
+            letter: which AWG is being referenced,
+                thus giving the board to be referenced
+            val: clock period that is read
         """
         letter = str(self._arbitrary_generator)
         if letter == 'a' or letter == 'b':
             return self.write(f'C AWG-AB CP?')
         else:
             return self.write(f'C AWG-CD CP?')
+
+    def _set_control(self, input):
+        """
+        attempt to fix phantom voltages (failed)
+        """
+
+        awg_num = self.selchan()
+        chan = self.parent.channels[awg_num - 1]
+        if input == 'START':
+            chan.volt.cache._update_with(value=None, raw_value=None)
+        
+        return self.write(f'C AWG-{self._arbitrary_generator} {input}')
 
     #Parsers for AWG Functionality
     def _block_get_parser(self, input):
@@ -953,7 +902,6 @@ class SWG(InstrumentChannel, SP1060Reader):
                                 label = f'{name} clip',
                                 get_cmd = f'C SWG CLP?',
                                 get_parser = self._clip_get_parser
-                                #do boolean here too?
                                 )
         
         self.clock: Parameter = self.add_parameter('clock',
@@ -988,7 +936,7 @@ class SWG(InstrumentChannel, SP1060Reader):
                                 get_parser = self._lin_get_parser
                                 )
 
-    #Methods of the class
+    #Methods
     def apply(self):
         """
         Command to actually use the user specified wave
@@ -1252,13 +1200,15 @@ class WAV(InstrumentChannel, SP1060Reader):
         self.memsize: Parameter = self.add_parameter('memsize',
                                 label = f'{name} memsize',
                                 get_cmd = f'C WAV-{wave_mem} MS?',
-                                get_parser = int
+                                get_parser = int,
+                                vals = vals.Ints(0, 34000)
                                 )
 
         self.lin: Parameter = self.add_parameter('lin',
                                 label = f'{name} lin',
                                 get_cmd = f'C WAV-{wave_mem} LINCH?',
-                                get_parser = int
+                                get_parser = int,
+                                vals = vals.Ints(0, 24)
                                 )
 
         self.busy: Parameter = self.add_parameter('busy',
@@ -1267,9 +1217,7 @@ class WAV(InstrumentChannel, SP1060Reader):
                                 get_parser = self._busy_get_parser
                                 )
 
-    """
-    add a docstring for these probably
-    """
+    
     #methods
     def clear(self):
         """
@@ -1405,7 +1353,6 @@ class Board(InstrumentChannel, SP1060Reader):
         return dict[input]
 
 
-
 class SP1060(VisaInstrument, SP1060Reader):
     """
     QCoDeS driver for the Basel Precision Instruments SP1060 LNHR DAC
@@ -1441,15 +1388,21 @@ class SP1060(VisaInstrument, SP1060Reader):
         handle.write_termination = '\r\n'
         handle.read_termination = '\r\n'
 
-        # Create channels
-        """probably make docstrings for each generation here"""
+
+        """
+        Define channels in qcodes corresponding to the channels
+        of the SP1060 (12 or 24). These can be accessed by
+        SP1060.ch[number] for their attributes, or SP1060.channels
+        can be used to see all of the channels qcodes defined
+        (this will list the channels as SP1060.chan[number] but
+        this is to differentiate the names)
+        """
         channels = ChannelList(self, 
                                "Channels", 
                                SP1060Channel, 
                                snapshotable = False,
                                multichan_paramclass = SP1060MultiChannel)
         self.num_chans = num_chans
-        
         for i in range(1, 1+self.num_chans):
             channel = SP1060Channel(self, 'chan{:1}'.format(i), i, 
                                     voltage_post_delay=voltage_post_delay, 
@@ -1462,16 +1415,22 @@ class SP1060(VisaInstrument, SP1060Reader):
         self.add_submodule('channels', channels)
         
         
-        #create ramp generators
+        """
+        Define ramp generators in qcodes corresponding to
+        the ramp generators in the SP1060. There are 4 ramp
+        generators regardless of 12/24 channels. These can
+        be accessed via SP1060.ramp[lowercase letter] for
+        attributes or SP1060.ramp_generators for the list
+        of the 4 ramp generators (which will be listed as
+        SP1060.ramp[lowercase letter])
+        """
         generators = ChannelList(self,
                                       "Generators",
                                       RampGenerator,
                                       snapshotable = False,
                                       multichan_paramclass = None
                                       )
-        
         ramp_gens = ('a', 'b', 'c', 'd')
-
         for i in range(0,4):
             generator = RampGenerator(self, 'ramp{:1}'.format(ramp_gens[i]), ramp_gens[i])
             generators.append(generator)
@@ -1480,29 +1439,41 @@ class SP1060(VisaInstrument, SP1060Reader):
         self.add_submodule('ramp_generators', generators)
 
 
-        #create AWG generators
+        """
+        Defines arbitrary wavefunction generators (AWGs)
+        to fit the channels of the instrument (12 or 24).
+        There will therefore be 2 or 4 present. These
+        can be accessed by SP1060.awg[lowercase letter]
+        for attributes or SP1060.aw_generators for a list
+        of the AWGs (appearing as SP1060.awgens[lowercase
+        letter]). Only AWG-A/B can access channels 1-12
+        and similarly AWG-C/D for 13-24
+        """
         arbitrary_generators = ChannelList(self,
                                       "Arbitrary_Generators",
                                       AWG,
                                       snapshotable = False,
                                       multichan_paramclass = None
                                       )
-        
         aw_gens = ('a', 'b', 'c', 'd')
-
-        for i in range (0, 4):
+        for i in range (0, int(num_chans/6)):
             arbitrary_generator = AWG(self, 'awgens{:1}'.format(aw_gens[i]), aw_gens[i])
             arbitrary_generators.append(arbitrary_generator)
             self.add_submodule('awg{:1}'.format(aw_gens[i]), arbitrary_generator)
         arbitrary_generators.lock()
         self.add_submodule('aw_generators', arbitrary_generators)
-        #int(num_chans/6)
-
         
 
-
-        
-        #singular SWG?
+        """
+        Defines a standard wavefunction generator (SWG).
+        While not physical, the attributes contained in
+        this generator are separate from the AWG to
+        differentiate them. Since these attributes can
+        be used for all AWGs, only one SWG thus needs
+        to be defined. The SWG can be accessed via
+        SP1060.swg for attributes and by
+        SP1060.sw_generators to see the list of one SWG
+        """
         standard_wgs = ChannelList(self,
                                 "Standard Waveform Generator",
                                 SWG,
@@ -1516,10 +1487,13 @@ class SP1060(VisaInstrument, SP1060Reader):
         standard_wgs.lock()
         self.add_submodule('sw_generators', standard_wgs)
         
-        
-        
-        
-        #make WAV memories
+
+        """
+        Defines the wave memories (WAV) A/B/C/D/S.
+        These memories can be accessed for attributes
+        via SP1060.wm[letter] and for the list via
+        SP1060.wm[letter]
+        """
         wave_mems = ChannelList(self,
                                 "Wave Memories",
                                 WAV,
@@ -1533,10 +1507,19 @@ class SP1060(VisaInstrument, SP1060Reader):
             self.add_submodule('wm{:1}'.format(wave_mem_s[i]), wave_mem)
         wave_mems.lock()
         self.add_submodule('w_memories', wave_mems)
-        #int(num_chans/6)
 
 
-        #make some boards for trivial reasons
+        """
+        Defines boards for the dac. This is to
+        simplify some board commands such as sync
+        updates that pull the specification of
+        the board in the command. To access them
+        for such attributes, use SP1060.board[letter]
+        and for the list use SP1060.boards. Note
+        that "both" is 'lh' but that it can only
+        be received for a sync command and cannot
+        be used for setting the update of each board
+        """
         board_s = ChannelList(self,
                               "Boards",
                               Board,
@@ -1563,8 +1546,9 @@ class SP1060(VisaInstrument, SP1060Reader):
         print('Current DAC output: ' +  str(self.channels[:].volt.get()))
 
     """
-    A helper function to produce a sine wave of specified 
-    frequency from AWG-A from channel 12 (mine)
+    A helper function to produce a sine wave from
+    AWG-A to channel 12 with user specified frequency
+    and amplitude
     """
     def awghelper(self, frequency, amplitude):
         sleep_time = 0.2
@@ -1592,6 +1576,46 @@ class SP1060(VisaInstrument, SP1060Reader):
         time.sleep(sleep_time)
         self.awga.control('START')
 
+    """
+    A helper function to produce a 3 cycle ramp out
+    of channel 1 from RMP-A with user specified
+    voltage range and period
+    """
+    def ramphelper(self, start, stop, period):
+        self.rampa.start(start)
+        self.rampa.stop(stop)
+        self.rampa.shape('sawtooth')
+        self.rampa.selchan(1)
+        self.rampa.period(period)
+        self.rampa.cycles(3)
+        self.rampa.mode('ramp')
+        self.rampa.control('START')
+
+    """
+    channel helper function
+    """
+    def chhelper(self, amplitude):
+        self.ch1.status('ON')
+        self.ch1.bw('LBW')
+        self.ch1.volt(amplitude)
+
+    """
+    registered channel helper function
+    """
+    def rghelper(self, volt1, volt2, volt3):
+        self.boardl.update('sync')
+        self.ch1.status('ON')
+        self.ch2.status('ON')
+        self.ch3.status('ON')
+        self.ch1.volt(volt1)
+        self.ch2.volt(volt2)
+        self.ch3.volt(volt3)
+        self.boardl.sync()
+
+
+    
+    
+    
     """
     Below this was provided by BASPI
     """
@@ -3006,5 +3030,3 @@ class SP1060(VisaInstrument, SP1060Reader):
         elif num == 5:
             print("Writing not allowed")
 
-
-# %%
