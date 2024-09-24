@@ -9,28 +9,21 @@ heirarchy within the driver. Each class (excluding
 SP1060) then has its appropriate commands as
 attributes.
 
-Channels = ClassSP1060Channel()
-Ramp Gens = ClassRampGenerator()
-AWGs = ClassAWG()
-SP1060 = ClassSP1060()
+dac = SP1060('LNHR', 'TCPIP0::192.168.0.5::23::SOCKET', num_chans=12, voltage_post_delay=0.01)
+dac.ch1.status('ON') # turn channel output on
+dac.ch1.volt(3) # set a voltage
+dac.ramphelper(start=0, stop=1, period=0.3, channel=1, cycles=2) # perform two ramps
+
 """
 
 
 import time
 import pyvisa as visa
-import warnings
-import logging
-from qcodes import logger
-from functools import partial
 from typing import Sequence, Any
 from qcodes import VisaInstrument, InstrumentChannel, ChannelList
 from qcodes.instrument.channel import MultiChannelInstrumentParameter
 from qcodes.utils import validators as vals
 from qcodes.parameters import Parameter
-
-
-log = logging.getLogger(__name__)
-
 
 class SP1060Exception(Exception):
     pass
@@ -135,7 +128,7 @@ class SP1060Channel(InstrumentChannel, SP1060Reader):
                             label = f'chan{channel} registered',
                             unit = 'V', 
                             get_cmd = f'{channel} VR?',
-                            get_parser = self.parent._dacval_to_vval,
+                            get_parser = self._dacval_to_vval,
                             vals = self._volt_val
                             )
 
@@ -161,7 +154,7 @@ class SP1060Channel(InstrumentChannel, SP1060Reader):
     def _read_voltage(self):
         chan = self._channel
         dac_code=self.parent.write('{:0} V?'.format(chan))
-        return self.parent._dacval_to_vval(dac_code)
+        return self._dacval_to_vval(dac_code)
 
 
 class RampGenerator(InstrumentChannel, SP1060Reader):
@@ -1559,7 +1552,6 @@ class SP1060(VisaInstrument, SP1060Reader):
     and amplitude
     """
     def awghelper(self, frequency, amplitude):
-        sleep_time = 0.2
         self.swg.mode('generate')
         self.swg.wave('sine')
         self.swg.freq(frequency)
@@ -1771,8 +1763,6 @@ class SP1060(VisaInstrument, SP1060Reader):
     def read_mode(self, chan):
             dac_code = self.write('{:0} M?'.format(chan))
             return dac_code
-
-
 
 ############################################################
 
