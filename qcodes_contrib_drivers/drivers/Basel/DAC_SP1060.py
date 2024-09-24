@@ -131,7 +131,7 @@ class SP1060Channel(InstrumentChannel, SP1060Reader):
                             )
         
         """clarify difference with volt"""
-        self.registered: Parameter = self.add_parameter('registered',
+        self.rg: Parameter = self.add_parameter('registered',
                             label = f'chan{channel} registered',
                             unit = 'V', 
                             get_cmd = f'{channel} VR?',
@@ -509,7 +509,6 @@ class AWG(InstrumentChannel, SP1060Reader):
                                 get_parser = self._state_get_parser
                                 )
         
-        ##AWG Cycles-Done
         self.cycles_done: Parameter = self.add_parameter('cycles_done',
                                 label = f'{name} cycles_done',
                                 get_cmd = f'C AWG-{arbitrary_generator} CD?',
@@ -649,14 +648,23 @@ class AWG(InstrumentChannel, SP1060Reader):
 
     def _set_control(self, input):
         """
-        attempt to fix phantom voltages (failed)
+        Command to set an awg to start or stop.
+        A delay is added to allow the awg helper
+        function to run without any added delays.
+        The cache clearing aspect is added to avoid
+        any jumps in voltage to previous selected
+        channel voltage values.
+
+        Args:
+            input: START/STOP
         """
 
         awg_num = self.selchan()
         chan = self.parent.channels[awg_num - 1]
         if input == 'START':
             chan.volt.cache._update_with(value=None, raw_value=None)
-        
+            time.sleep(0.2) # HACK: needed in practice before playing a waveform
+
         return self.write(f'C AWG-{self._arbitrary_generator} {input}')
 
     #Parsers for AWG Functionality
@@ -849,7 +857,7 @@ class SWG(InstrumentChannel, SP1060Reader):
         
         self.amp: Parameter = self.add_parameter('amp',
                                 label = f'{name} amp',
-                                unit = 'V',
+                                unit = 'Vp',
                                 set_cmd = f'C SWG AMP {{}}',
                                 get_cmd = f'C SWG AMP?',
                                 get_parser = float,
@@ -943,12 +951,14 @@ class SWG(InstrumentChannel, SP1060Reader):
         function and save the user specified waveform to
         the user specified wave memory slot. If this
         command is not used, the waveform will not be
-        saved to any wave memory
+        saved to any wave memory. Delay added to ensure
+        entire waveform is saved before copying further
 
         Args:
             N/A
         """
         self.write(f'C SWG APPLY')
+        time.sleep(0.2) # HACK: needed in practice after applying a waveform
 
     #Parsers for the attributes
     def _mode_set_parser(self, modeval):
@@ -1192,8 +1202,6 @@ class WAV(InstrumentChannel, SP1060Reader):
                 corresponding AWG memory
         """
         super().__init__(parent, name)
-
-        # need something else here?
 
         self._wave_mem = wave_mem
 
@@ -1553,27 +1561,16 @@ class SP1060(VisaInstrument, SP1060Reader):
     def awghelper(self, frequency, amplitude):
         sleep_time = 0.2
         self.swg.mode('generate')
-        time.sleep(sleep_time)
         self.swg.wave('sine')
-        time.sleep(sleep_time)
         self.swg.freq(frequency)
-        time.sleep(sleep_time)
         self.swg.amp(amplitude)
-        time.sleep(sleep_time)
         self.swg.selwm('a')
-        time.sleep(sleep_time)
         self.swg.selfunc('copy')
-        time.sleep(sleep_time)
         self.awga.selchan(12)
-        time.sleep(sleep_time)
         self.swg.lin('true')
-        time.sleep(sleep_time)
         self.swg.apply()
-        time.sleep(sleep_time)
         self.wma.toawg()
-        time.sleep(sleep_time)
         self.ch12.status('ON')
-        time.sleep(sleep_time)
         self.awga.control('START')
 
     """
@@ -1581,22 +1578,22 @@ class SP1060(VisaInstrument, SP1060Reader):
     of channel 1 from RMP-A with user specified
     voltage range and period
     """
-    def ramphelper(self, start, stop, period):
+    def ramphelper(self, start, stop, period, channel=1, shape='sawtooth', mode='ramp', cycles=3):
         self.rampa.start(start)
         self.rampa.stop(stop)
-        self.rampa.shape('sawtooth')
-        self.rampa.selchan(1)
+        self.rampa.shape(shape)
+        self.rampa.selchan(channel)
         self.rampa.period(period)
-        self.rampa.cycles(3)
-        self.rampa.mode('ramp')
+        self.rampa.cycles(cycles)
+        self.rampa.mode(mode)
         self.rampa.control('START')
 
     """
     channel helper function
     """
-    def chhelper(self, amplitude):
+    def chhelper(self, amplitude, bw='LBW'):
         self.ch1.status('ON')
-        self.ch1.bw('LBW')
+        self.ch1.bw(bw)
         self.ch1.volt(amplitude)
 
     """
