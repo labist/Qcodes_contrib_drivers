@@ -1,17 +1,26 @@
 [build-system]
 requires = [
-    "setuptools >= 61.2",
-    "wheel >= 0.29.0",
-    "versioningit >= 1.1.0"
+    "setuptools >= 68.1.2",
+    "versioningit >= 2.2.1"
 ]
 build-backend = 'setuptools.build_meta'
 
 [project]
 name = "qcodes_contrib_drivers"
 description = "User contributed drivers for QCoDeS"
-classifiers = [ "Development Status :: 3 - Alpha", "Intended Audience :: Science/Research", "License :: OSI Approved :: MIT License", "License :: OSI Approved :: GNU General Public License v2 or later (GPLv2+)", "Programming Language :: Python :: 3 :: Only", "Programming Language :: Python :: 3.8", "Programming Language :: Python :: 3.9", "Programming Language :: Python :: 3.10", "Topic :: Scientific/Engineering",]
-requires-python = ">=3.8"
-dependencies = [ "qcodes>=0.33.0", "versioningit>=1.1.0", "packaging"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: GNU General Public License v2 or later (GPLv2+)",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",]
+requires-python = ">=3.10"
+dependencies = [ "qcodes>=0.42.0", "versioningit>=2.2.1", "packaging", "pandas", "cffi", "python-dotenv", "autobahn"]
 dynamic = [ "version",]
 
 [[project.maintainers]]
@@ -32,8 +41,17 @@ Source = "https://github.com/qcodes/qcodes_contrib_drivers"
 Tracker = "https://github.com/QCoDeS/Qcodes_contrib_drivers/issues"
 
 [project.optional-dependencies]
-test = [ "pytest>=6.2.2", "pytest-mock", "mypy>=0.940", "pytest-cov>=3.0.0", "coverage[toml]>=6.2", "pyvisa-sim",]
-docs = [ "sphinx", "sphinx_rtd_theme", "nbsphinx",]
+test = [
+    "pytest>=6.2.2",
+    "pytest-mock",
+    "mypy>=0.940",
+    "pytest-cov>=3.0.0",
+    "coverage[toml]>=6.2",
+    "pyvisa-sim",
+    "types-tqdm>=4.64.6",
+    "pandas-stubs",
+]
+docs = [ "sphinx", "furo", "nbsphinx", ]
 
 [tool.mypy]
 strict_optional = true
@@ -47,7 +65,8 @@ show_error_codes = true
 
 [[tool.mypy.overrides]]
 module = [
-    "qcodes_contrib_drivers.drivers.Spectrum.pyspcm"
+    "qcodes_contrib_drivers.drivers.Spectrum.pyspcm",
+    "qcodes_contrib_drivers.drivers.OxfordInstruments._decsvisa.*",
     ]
 ignore_errors = true
 
@@ -65,9 +84,25 @@ module = [
     "pyspcm",
     "spirack",
     "zhinst.*",
-    "ruamel.*"
+    "ruamel.*",
+    "msl.loadlib",
+    "AMC",
+    "ACS",
+    "autobahn",
+    "python-dotenv"
 ]
 ignore_missing_imports = true
+
+[tool.setuptools]
+zip-safe = false
+license-files = [
+    "LICENSE_TEKTRONIX_AWG520_KEITHLEY_2700",
+    "LICENSE",
+]
+
+[tool.setuptools.cmdclass]
+sdist = "versioningit.cmdclass.sdist"
+build_py = "versioningit.cmdclass.build_py"
 
 [tool.versioningit]
 default-version = "0.0"
@@ -82,5 +117,5 @@ method = "git"
 match = ["v*"]
 
 [tool.versioningit.onbuild]
-source-file = "qcodes_contrib_drivers/_version.py"
+source-file = "src/qcodes_contrib_drivers/_version.py"
 build-file = "qcodes_contrib_drivers/_version.py"
