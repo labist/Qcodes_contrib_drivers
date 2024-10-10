@@ -1,9 +1,8 @@
 #%%
-from DAC_SP1060 import SP1060
+from qcodes_contrib_drivers.drivers.Basel.DAC_SP1060 import SP1060
 import time 
 
 dac = SP1060('LNHR', 'TCPIP0::192.168.0.5::23::SOCKET', num_chans=12, voltage_post_delay=0.01)
-#dac.ch11.status('ON')
 
 #%%
 dac.ch1.volt(0)
