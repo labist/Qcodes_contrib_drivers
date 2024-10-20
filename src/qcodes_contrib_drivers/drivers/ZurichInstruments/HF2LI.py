@@ -202,7 +202,52 @@ class HF2LIDemod(InstrumentChannel):
                 label = 'on/off for sigout',
                 get_cmd = partial(self._get_sigout_on),
                 set_cmd = partial(self._set_sigout_on),
-                vals = vals.Numbers(0,1)
+                vals = vals.Numbers(0,1),
+                docstring="""\
+                Output signal on/off.
+        
+                0: off
+                1: on
+                """
+        )
+
+        self.add_parameter(
+            name = 'imp50',
+            label = 'on/off for 50 Ohm input impedance',
+            get_cmd = partial(self._get_imp50),
+            set_cmd = partial(self._set_imp50),
+            vals = vals.Enum(0, 1),
+            docstring = """\
+            Set input impedance
+            0: 1 MHz input impedance
+            1: 50 Ohm input impedance
+            """
+        )
+
+        self.add_parameter(
+            name = 'ac_couple',
+            label = 'on/off AC coupling for input signal',
+            get_cmd = partial(self._get_ac),
+            set_cmd = partial(self._set_ac),
+            vals = vals.Enum(0, 1),
+            docstring = """\
+            Coupling for input signals. AC coupling inserts a high-pass filter.
+            0: AC coupling off
+            1: AC coupling on
+            """
+        )
+
+        self.add_parameter(
+            name = 'diff',
+            label = 'on/off for Diff measurements',
+            get_cmd = partial(self._get_diff),
+            set_cmd = partial(self._set_diff),
+            vals = vals.Enum(0, 1),
+            docstring = """\
+            Toggle between single ended and differential measurements.
+            0: Diff off
+            1: Diff on
+            """
         )
 
     def _get_frequency(self) -> float:
@@ -340,6 +385,30 @@ class HF2LIDemod(InstrumentChannel):
         path = f'/{self.dev_id}/sigouts/{self.sigout()}/on'
         self.daq.setInt(path, val)    
     
+    def _get_imp50(self) -> int:
+        path = f'/{self.dev_id}/sigins/{self.sigin()}/imp50'
+        return self.daq.getInt(path)
+    
+    def _set_imp50(self, val:int) -> int:
+        path = f'/{self.dev_id}/sigins/{self.sigin()}/imp50'
+        self.daq.setInt(path, val)
+
+    def _get_ac(self) -> int:
+        path = f'/{self.dev_id}/sigins/{self.sigin()}/ac'
+        self.daq.getInt(path)
+
+    def _set_ac(self, val:int) -> int:
+        path = f'/{self.dev_id}/sigins/{self.sigin()}/ac'
+        self.daq.setInt(path, val)
+
+    def _get_diff(self) -> int:
+        path = f'/{self.dev_id}/sigins/{self.sigin()}/diff'
+        self.daq.getInt(path)
+
+    def _set_diff(self, val:int) -> int:
+        path = f'/{self.dev_id}/sigins/{self.sigin()}/diff'
+        self.daq.setInt(path, val)
+
     def _get_sweep_param(self, param, fr=True):
         if self.auto_trigger :
             self.trigger_sweep()
@@ -350,7 +419,7 @@ class HF2LIDemod(InstrumentChannel):
             # detect which node we are sweeping with
             osc = self.osc()
             mixer = self.parent.sigout2mixer[osc]
-            amplitude = self.sigout_amplitude() / ( 2 * np.sqrt(2) ) # normalization factor for vpp 2x fudge
+            amplitude = self.sigout_amplitude() / np.sqrt(2) # normalization factor for vpp
             values = 20 * np.log10( self.samples[param]/amplitude )
 
         return values
@@ -385,6 +454,13 @@ class HF2LIDemod(InstrumentChannel):
         data = sweeper.read(True)
         self.samples = data[path][0][0]
         sweeper.unsubscribe(path) ### Unsubscribe from the signal path
+
+    # def trigger_sweep_average(num):
+    #     """Sweep multiple times and average the results."""
+    #     return
+    
+
+
 
 class HF2LI(Instrument):
     """
