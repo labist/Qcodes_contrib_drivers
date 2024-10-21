@@ -141,6 +141,14 @@ class HF2LIDemod(InstrumentChannel):
             vals = vals.Numbers(0,1)
         )
 
+        # TODO: finish sigin stuff
+        self.add_parameter(
+            name = 'sigin',
+            label = 'Sigin Index',
+            get_cmd = self._get_sigin,
+            vals = vals.Numbers(0, 1)
+        )
+
         self.add_parameter(
             name='frequency',
             label='Frequency',
@@ -219,7 +227,7 @@ class HF2LIDemod(InstrumentChannel):
             vals = vals.Enum(0, 1),
             docstring = """\
             Set input impedance
-            0: 1 MHz input impedance
+            0: 1 MOhm input impedance
             1: 50 Ohm input impedance
             """
         )
@@ -265,6 +273,15 @@ class HF2LIDemod(InstrumentChannel):
         osc_index = self.osc()
         return self.daq.set([["/%s/oscs/%d/freq" % (self.dev_id, osc_index), freq]])
 
+    # TODO: finish the sigin stuff 
+    def _get_sigin(self):
+        sigin_index = f'/{self.dev_id}/demods/{self.demod}/adcselect/'
+        return self.daq.getInt(sigin_index)
+    
+    def _set_sigin(self, val: int) -> int:
+        sigin_index = f'/{self.dev_id}/demods/{self.demod}/adcselect/'
+        self.daq.setInt(sigin_index, val)
+        
     def _get_sigout(self):
         return self.osc()
 
@@ -395,7 +412,7 @@ class HF2LIDemod(InstrumentChannel):
 
     def _get_ac(self) -> int:
         path = f'/{self.dev_id}/sigins/{self.sigin()}/ac'
-        self.daq.getInt(path)
+        return self.daq.getInt(path)
 
     def _set_ac(self, val:int) -> int:
         path = f'/{self.dev_id}/sigins/{self.sigin()}/ac'
@@ -403,7 +420,7 @@ class HF2LIDemod(InstrumentChannel):
 
     def _get_diff(self) -> int:
         path = f'/{self.dev_id}/sigins/{self.sigin()}/diff'
-        self.daq.getInt(path)
+        return self.daq.getInt(path)
 
     def _set_diff(self, val:int) -> int:
         path = f'/{self.dev_id}/sigins/{self.sigin()}/diff'
@@ -479,6 +496,7 @@ class HF2LI(Instrument):
         device: Device name, e.g. "dev204", used to create zhinst API session.
         demod: Index of the demodulator to use.
         sigout: Index of the sigout channel to use as excitation source.
+        # sigin: Index of the sigin channel being used.
         auxouts: Dict of the form {output: index},
             where output is a key of HF2LI.OUTPUT_MAPPING, for example {"X": 0, "Y": 3}
             to use the instrument as a lockin amplifier in X-Y mode with auxout channels 0 and 3.
@@ -524,7 +542,7 @@ class HF2LI(Instrument):
             )
             self.add_parameter(
                 name=f'output_{ch}',
-                label=f'{ch} outptut select',
+                label=f'{ch} output select',
                 get_cmd=lambda channel=ch: self._get_output_select(channel),
                 get_parser=str
             )
