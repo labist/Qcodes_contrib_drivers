@@ -258,6 +258,25 @@ class HF2LIDemod(InstrumentChannel):
             """
         )
 
+        self.add_parameter(
+            name = 'order',
+            label = 'order of low pass filter',
+            get_cmd = partial(self._get_order),
+            set_cmd = partial(self._set_order),
+            vals = vals.Enum(1, 2, 3, 4, 5, 6, 7, 8),
+            docstring = """\
+            Set the filter order
+            1: 6 dB/oct slope
+            2: 12 dB/oct slope
+            3: 18 dB/oct slope
+            4: 24 dB/oct slope
+            5: 30 dB/oct slope
+            6: 36 dB/oct slope
+            7: 42 dB/oct slope
+            8: 48 dB/oct slope
+            """
+        )
+
     def _get_frequency(self) -> float:
         """
         get frequency by looking up oscillator 
@@ -273,7 +292,6 @@ class HF2LIDemod(InstrumentChannel):
         osc_index = self.osc()
         return self.daq.set([["/%s/oscs/%d/freq" % (self.dev_id, osc_index), freq]])
 
-    # TODO: finish the sigin stuff 
     def _get_sigin(self):
         sigin_index = f'/{self.dev_id}/demods/{self.demod}/adcselect/'
         return self.daq.getInt(sigin_index)
@@ -426,6 +444,14 @@ class HF2LIDemod(InstrumentChannel):
         path = f'/{self.dev_id}/sigins/{self.sigin()}/diff'
         self.daq.setInt(path, val)
 
+    def _get_order(self) -> int:
+        path = f'/{self.dev_id}/demods/{self.demod}/order'
+        return self.daq.getInt(path)
+
+    def _set_order(self, val: int) -> int:
+        path = f'/{self.dev_id}/demods/{self.demod}/order'
+        self.daq.setInt(path, val)
+
     def _get_sweep_param(self, param, fr=True):
         if self.auto_trigger :
             self.trigger_sweep()
@@ -436,8 +462,8 @@ class HF2LIDemod(InstrumentChannel):
             # detect which node we are sweeping with
             osc = self.osc()
             mixer = self.parent.sigout2mixer[osc]
-            amplitude = self.sigout_amplitude() / np.sqrt(2) # normalization factor for vpp
-            values = 20 * np.log10( self.samples[param]/amplitude )
+            amplitude = self.sigout_amplitude() # normalization factor for vpp
+            values = 20 * np.log10( self.samples[param] * np.sqrt(2) /amplitude )
 
         return values
 
