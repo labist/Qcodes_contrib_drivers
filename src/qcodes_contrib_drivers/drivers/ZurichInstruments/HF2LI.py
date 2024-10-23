@@ -138,55 +138,65 @@ class HF2LIDemod(InstrumentChannel):
             name = 'sigout',
             label = 'Sigout Index',
             get_cmd = self._get_sigout,
-            vals = vals.Numbers(0,1)
+            vals = vals.Numbers(0,1),
+            docstring = """\
+            Output signal.
+            0: output signal 1
+            1: output signal 2
+            """
         )
 
         self.add_parameter(
             name = 'sigin',
             label = 'Sigin Index',
             get_cmd = self._get_sigin,
-            vals = vals.Numbers(0, 1)
+            vals = vals.Numbers(0, 1),
+            docstring = """\
+            Input signal.
+            0: input signal 1
+            1: input signal 2
+            """
         )
 
         self.add_parameter(
-            name='frequency',
-            label='Frequency',
-            unit='Hz',
-            get_cmd=self._get_frequency,
-            set_cmd=self._set_frequency,
-            get_parser=float
+            name = 'frequency',
+            label = 'Frequency',
+            unit ='Hz',
+            get_cmd = self._get_frequency,
+            set_cmd = self._set_frequency,
+            get_parser = float
         ) 
 
         self.add_parameter(
-            name='sigout_range',
-            label='Signal output range',
-            unit='V',
-            get_cmd=self._get_sigout_range,
-            get_parser=float,
-            set_cmd=self._set_sigout_range,
-            vals=vals.Enum(0.01, 0.1, 1, 10)
+            name = 'sigout_range',
+            label = 'Signal output range',
+            unit = 'V',
+            get_cmd = self._get_sigout_range,
+            get_parser = float,
+            set_cmd = self._set_sigout_range,
+            vals = vals.Enum(0.01, 0.1, 1, 10)
         )
 
         self.add_parameter(
-                name='sigout_offset',
-                label='Signal output offset',
-                unit='V',
-                snapshot_value=True,
-                set_cmd=self._set_sigout_offset,
-                get_cmd=self._get_sigout_offset,
-                vals=vals.Numbers(-1, 1),
-                docstring='Multiply by sigout_range to get actual offset voltage.'
+                name = 'sigout_offset',
+                label = 'Signal output offset',
+                unit = 'V',
+                snapshot_value = True,
+                set_cmd = self._set_sigout_offset,
+                get_cmd = self._get_sigout_offset,
+                vals = vals.Numbers(-1, 1),
+                docstring = 'Multiply by sigout_range to get actual offset voltage.'
             )    
         
         self.add_parameter(
-                name= 'sigout_amplitude',
-                label= 'Signal output mixer amplitude',
-                unit='Gain',
-                get_cmd=partial( self._get_sigout_amplitude ),
-                get_parser=float,
-                set_cmd=partial( self._set_sigout_amplitude ),
-                vals=vals.Numbers(-10, 10),
-                docstring='Multiply by sigout_range to get actual output voltage.'
+                name = 'sigout_amplitude',
+                label = 'Signal output mixer amplitude',
+                unit = 'Gain',
+                get_cmd = partial( self._get_sigout_amplitude ),
+                get_parser = float,
+                set_cmd = partial( self._set_sigout_amplitude ),
+                vals = vals.Numbers(-10, 10),
+                docstring = 'Multiply by sigout_range to get actual output voltage.'
             )
         
         self.add_parameter(
@@ -223,6 +233,7 @@ class HF2LIDemod(InstrumentChannel):
             label = 'on/off for 50 Ohm input impedance',
             get_cmd = partial(self._get_imp50),
             set_cmd = partial(self._set_imp50),
+            unit = 'Ohm',
             vals = vals.Enum(0, 1),
             docstring = """\
             Set input impedance
@@ -257,28 +268,10 @@ class HF2LIDemod(InstrumentChannel):
             """
         )
 
-        self.add_parameter(
-            name = 'order',
-            label = 'order of low pass filter',
-            get_cmd = partial(self._get_order),
-            set_cmd = partial(self._set_order),
-            vals = vals.Enum(1, 2, 3, 4, 5, 6, 7, 8),
-            docstring = """\
-            Set the filter order
-            1: 6 dB/oct slope
-            2: 12 dB/oct slope
-            3: 18 dB/oct slope
-            4: 24 dB/oct slope
-            5: 30 dB/oct slope
-            6: 36 dB/oct slope
-            7: 42 dB/oct slope
-            8: 48 dB/oct slope
-            """
-        )
 
     def _get_frequency(self) -> float:
         """
-        get frequency by looking up oscillator 
+        Get frequency by looking up oscillator 
         """
         osc_index = self.osc()
         path = f'/{self.dev_id}/oscs/{osc_index}/freq/'
@@ -286,23 +279,31 @@ class HF2LIDemod(InstrumentChannel):
     
     def _set_frequency(self, freq) -> float:
         """
-        set frequency by looking up oscillator 
+        Set frequency by looking up oscillator 
         """
         osc_index = self.osc()
         return self.daq.set([["/%s/oscs/%d/freq" % (self.dev_id, osc_index), freq]])
 
     def _get_sigin(self):
+        """
+        Look up index of the input signal
+        """
         sigin_index = f'/{self.dev_id}/demods/{self.demod}/adcselect/'
         return self.daq.getInt(sigin_index)
     
     def _set_sigin(self, val: int) -> int:
+        """
+        Set the index of the input signal
+        """
         sigin_index = f'/{self.dev_id}/demods/{self.demod}/adcselect/'
         self.daq.setInt(sigin_index, val)
         
     def _get_sigout(self):
+        """Look up the index of the output signal"""
         return self.osc()
 
     def _get_osc(self):
+        """Look up the index of oscillator used to demodulate the signal"""
         if self.demod in ['6','7']:
             return int(self.demod) - 6
         else:
@@ -310,6 +311,7 @@ class HF2LIDemod(InstrumentChannel):
             return self.daq.getInt(path)
     
     def _set_osc(self, value):
+        """Set the index of oscillator used to demodulate the signal"""
         if self.demod in ['6','7']:
             print('Cannot change oscillator for demod 6 or 7')
             return
@@ -334,10 +336,12 @@ class HF2LIDemod(InstrumentChannel):
         return np.angle(cmplx)*180/np.pi
     
     def _get_phase(self) -> float:
+        """Get the phase shift of the demodulator"""
         path = f'/{self.dev_id}/demods/{self.demod}/phaseshift/'
         return self.daq.getDouble(path)
 
     def _set_phase(self, phase: float) -> None:
+        """Set the phase shift of the demodulator"""
         path = f'/{self.dev_id}/demods/{self.demod}/phaseshift/'
         self.daq.setDouble(path, phase)
 
@@ -347,6 +351,16 @@ class HF2LIDemod(InstrumentChannel):
             param: string parameter name. eg timeconstant\
         Returns:
             parameter value as a double
+
+        Example for filter order:
+        1: 6 dB/oct slope
+        2: 12 dB/oct slope
+        3: 18 dB/oct slope
+        4: 24 dB/oct slope
+        5: 30 dB/oct slope
+        6: 36 dB/oct slope
+        7: 42 dB/oct slope
+        8: 48 dB/oct slope
         """
         path = f'/{self.dev_id}/demods/{self.demod}/{param}/'
         return self.daq.getDouble(path)
@@ -363,8 +377,7 @@ class HF2LIDemod(InstrumentChannel):
         self.daq.setDouble(path, value)
 
     def _sweeper_get( self, name ) :
-        """ wrap zi sweeper.get
-        """
+        """ wrap zi sweeper.get"""
         return self.sweeper.get( name )[name][0]
     
     def _get_sigout_range(self, sigout=None ) -> float:
@@ -443,14 +456,6 @@ class HF2LIDemod(InstrumentChannel):
         path = f'/{self.dev_id}/sigins/{self.sigin()}/diff'
         self.daq.setInt(path, val)
 
-    def _get_order(self) -> int:
-        path = f'/{self.dev_id}/demods/{self.demod}/order'
-        return self.daq.getInt(path)
-
-    def _set_order(self, val: int) -> int:
-        path = f'/{self.dev_id}/demods/{self.demod}/order'
-        self.daq.setInt(path, val)
-
     def _get_sweep_param(self, param, fr=True):
         if self.auto_trigger :
             self.trigger_sweep()
@@ -461,8 +466,8 @@ class HF2LIDemod(InstrumentChannel):
             # detect which node we are sweeping with
             osc = self.osc()
             mixer = self.parent.sigout2mixer[osc]
-            amplitude = self.sigout_amplitude() # normalization factor for vpp
-            values = 20 * np.log10( self.samples[param] * np.sqrt(2) /amplitude )
+            amplitude = self.sigout_amplitude() / np.sqrt(2) # normalization factor for vpp
+            values = 20 * np.log10( self.samples[param] /amplitude )
 
         return values
 
@@ -472,7 +477,7 @@ class HF2LIDemod(InstrumentChannel):
         sweeper = self.sweeper
         sweeper.set("device", self.dev_id)
         sweeper.set('gridnode', f'oscs/{self.osc()}/freq')
-        sweeper.set('scan', 0) ### Sequenctial sweep
+        sweeper.set('scan', 0) ### Sequential sweep
         sweeper.set("bandwidthcontrol", 0) ### Bandwidth control: Auto
         #sweeper.set('maxbandwidth', 100) ### Max demodulation bandwidth
         sweeper.set('settling/inaccuracy', 1.0e-08)
@@ -496,12 +501,6 @@ class HF2LIDemod(InstrumentChannel):
         data = sweeper.read(True)
         self.samples = data[path][0][0]
         sweeper.unsubscribe(path) ### Unsubscribe from the signal path
-
-    # def trigger_sweep_average(num):
-    #     """Sweep multiple times and average the results."""
-    #     return
-    
-
 
 
 class HF2LI(Instrument):
