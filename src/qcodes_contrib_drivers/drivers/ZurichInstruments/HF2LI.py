@@ -141,7 +141,6 @@ class HF2LIDemod(InstrumentChannel):
             vals = vals.Numbers(0,1)
         )
 
-        # TODO: finish sigin stuff
         self.add_parameter(
             name = 'sigin',
             label = 'Sigin Index',
