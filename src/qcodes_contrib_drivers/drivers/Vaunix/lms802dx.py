@@ -3,16 +3,16 @@ from qcodes.instrument.base import Instrument
 import numpy as np
 import qcodes as qc
 import os
-import qcodes_contrib_drivers.drivers.labbrick.lowlevel.lms as lms
-from qcodes_contrib_drivers.drivers.labbrick.lowlevel.lms import default_library_location
-from qcodes_contrib_drivers.drivers.labbrick.lowlevel.lms import VNXError
+import qcodes_contrib_drivers.drivers.Vaunix.lowlevel.lms as lms
+from qcodes_contrib_drivers.drivers.Vaunix.lowlevel.lms import default_library_location
+from qcodes_contrib_drivers.drivers.Vaunix.lowlevel.lms import VNXError
 
 api = lms.VNX_LSG_API.default()
 
 class LbB(Instrument):    
     ''' This will only work if you have installed the LMS binaries in lowlevel/
     This can be attempted automatically by calling
-    from qcodes_contrib_drivers.drivers.labbrick.lowlevel import lms
+    from qcodes_contrib_drivers.drivers.Vaunix.lowlevel import lms
     lms.download_lms_binaries()
     '''
     @classmethod
@@ -191,3 +191,7 @@ class LbB(Instrument):
             self.api.set_power_level(self._device_id, int(p))
         else:
             print("Power value out of range. \n Max: " + str(max_pwr/4) + "Min: " + str(min_pwr/4))
+
+    def get_idn(self):
+        # return "I am a brick"
+        return self.api.get_dev_info()

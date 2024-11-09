@@ -9,7 +9,7 @@ import logging
 import inspect
 from typing import List, Dict
 
-from qcodes_contrib_drivers.drivers.labbrick.lowlevel import VNXError
+from qcodes_contrib_drivers.drivers.Vaunix.lowlevel import VNXError
 
 __all__ = ['VNX_LSG_API', 'LSGStatus']
 
