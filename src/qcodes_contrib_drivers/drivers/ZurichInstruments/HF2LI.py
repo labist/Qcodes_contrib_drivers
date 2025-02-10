@@ -406,7 +406,7 @@ class HF2LIDemod(InstrumentChannel):
         mixer_channel = self.sigout() + 6
         path = f'/{self.dev_id}/sigouts/{self.sigout()}/amplitudes/{mixer_channel}/'
         range = self._get_sigout_range(sigout=self.sigout())
-        return self.daq.getDouble(path)*range
+        return self.daq.getDouble(path) * range
 
     def _set_sigout_amplitude(self, amp: float) -> None:
         mixer_channel = self.sigout() + 6
@@ -462,12 +462,13 @@ class HF2LIDemod(InstrumentChannel):
 
         if param == 'phase' :
             values = (self.samples[param])*180/np.pi
+
         else :
             # detect which node we are sweeping with
             osc = self.osc()
-            mixer = self.parent.sigout2mixer[osc]
-            amplitude = self.sigout_amplitude() / np.sqrt(2) # normalization factor for vpp
-            values = 20 * np.log10( self.samples[param] /amplitude )
+            amplitude = self.sigout_amplitude() / np.sqrt(2) # normalization factor for vpk
+            # values = self.samples[param] # - amplitude
+            values = 20 * np.log10( self.samples[param] / amplitude )
 
         return values
 
@@ -477,13 +478,21 @@ class HF2LIDemod(InstrumentChannel):
         sweeper = self.sweeper
         sweeper.set("device", self.dev_id)
         sweeper.set('gridnode', f'oscs/{self.osc()}/freq')
-        sweeper.set('scan', 0) ### Sequential sweep
-        sweeper.set("bandwidthcontrol", 0) ### Bandwidth control: Auto
+
+        # Params for type of scan:
+        # 0: sequential sweep
+        # 1: binary sweep
+        # 2: bidirectional sweep
+        # 3: reverse sweep
+        sweeper.set('scan', 0)
+
+        # sweeper.set("bandwidthcontrol", 0) ### Bandwidth control: Auto
         #sweeper.set('maxbandwidth', 100) ### Max demodulation bandwidth
-        sweeper.set('settling/inaccuracy', 1.0e-08)
+        sweeper.set('settling/inaccuracy', 100e-06)
         path = f"/{self.dev_id}/demods/{self.demod}/sample"
         sweeper.set("start", self.sweeper_start())
         sweeper.set("stop", self.sweeper_stop())
+        sweeper.set("xmapping", self.sweeper_xmapping())  # 0 for linear in x, 1 for log in x
         sweeper.set("samplecount", self.sweeper_samplecount()) 
         #sweeper.set()
         sweeper.subscribe(path)
