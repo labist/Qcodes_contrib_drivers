@@ -191,7 +191,7 @@ class HF2LIDemod(InstrumentChannel):
         self.add_parameter(
                 name = 'sigout_amplitude',
                 label = 'Signal output mixer amplitude',
-                unit = 'Gain',
+                unit = 'Vp',
                 get_cmd = partial( self._get_sigout_amplitude ),
                 get_parser = float,
                 set_cmd = partial( self._set_sigout_amplitude ),
@@ -268,6 +268,29 @@ class HF2LIDemod(InstrumentChannel):
             """
         )
 
+        self.daq.sync()
+        self.daq_module = self.daq.dataAcquisitionModule()
+
+        self._averages = 1 # keep averaging turned off for now
+        # self.add_parameter( 
+        #         name = 'averages',
+        #         unit='npts',
+        #         label= 'Averaging',
+        #         # set_cmd = partial( setattr, self, '_averages' ),
+        #         # get_cmd = partial( getattr, self, '_averages' )
+        #         get_cmd = partial(self._get_averages),
+        #         set_cmd = partial(self._set_averages),
+        #     )
+  
+        self._bits = 8
+        self.add_parameter( 'psd_points', 
+            unit = '',
+            label = 'Points',
+            set_cmd = self._set_points,
+            get_cmd = lambda : 2**self._bits
+        )
+
+        self.auto_trigger = False 
 
     def _get_frequency(self) -> float:
         """
@@ -471,6 +494,9 @@ class HF2LIDemod(InstrumentChannel):
             values = 20 * np.log10( self.samples[param] / amplitude )
 
         return values
+    
+    def _get_spectrum_param(self, param):
+        return self.spectrum_samples[param]
 
     def trigger_sweep(self):
         # sweeper = self.daq.sweep()
@@ -511,6 +537,44 @@ class HF2LIDemod(InstrumentChannel):
         self.samples = data[path][0][0]
         sweeper.unsubscribe(path) ### Unsubscribe from the signal path
 
+    def trigger_spectrum(self):
+            daq_module = self.daq_module
+            #self.snapshot(update=True)
+            daq_module.set("type", 0)  # was "mode" before with zoomfft-- assumed this corresponds to triggering mode
+
+            # 0=not overlapped, 1=overlapped
+            daq_module.set("spectrum/overlapped", 0)
+            daq_module.set("refreshrate", 0)
+
+            # 0=Rectangular, 1=Hann, 2=Hamming, 3=Blackman Harris,
+            # 16=Exponential, 17=Cosine, 18=Cosine squared.
+            daq_module.set("fft/window", 1)
+            daq_module.set("fft/absolute", 1) # Return absolute frequencies instead of relative to 0.
+            # daq_module.set("bit", self._bits ) # The number of lines is 2**bits.
+            daq_module.set("grid/cols", self._bits ) # The number of lines is 2**bits.
+            daq_module.set("grid/repetitions", self._averages )
+            self.daq_module.set('spectrum/autobandwidth', 1) # automatically set bandwidth
+            # self.daq_module.set('grid/repetitions', 50)
+            path = "/%s/demods/%d/sample.xiy.fft.abs" % (self.dev_id, self.demod)
+            daq_module.subscribe(path)
+            daq_module.execute()
+            # maybe need to "spectrum/enable" somewhere here?
+
+            start = time.time()
+            timeout = 60000  # [s]
+
+            while not daq_module.finished():
+                time.sleep(0.2)
+                progress = daq_module.progress()
+                if (time.time() - start) > timeout:
+                    print("\ndaqModule still not finished, forcing finish...")
+                    daq_module.finish()
+            print("")
+
+            return_flat_data_dict = True
+            data = daq_module.read(return_flat_data_dict)
+            self.spectrum_samples = data[path][0][0]
+            daq_module.unsubscribe(path)
 
 class HF2LI(Instrument):
     """
