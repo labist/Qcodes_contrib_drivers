@@ -38,6 +38,8 @@ class HF2LIDemod(InstrumentChannel):
         self.demod = demod
         self.dev_id = self.parent.dev_id
         self.daq = self.parent.daq
+        # self.clockbase = float(self.daq.getInt(f'/{self.dev_id}/clockbase'))
+
         # self.model = self._parent.model
         
         if int(demod) in range(6): # x, y, theta only for first 6 demods 
@@ -45,7 +47,6 @@ class HF2LIDemod(InstrumentChannel):
                         ('y', 'Demodulated y', 'V') )
             
             
-
             for name, unit, label in single_values :
                 self.add_parameter( f'{name}',
                         unit=unit,
@@ -113,7 +114,7 @@ class HF2LIDemod(InstrumentChannel):
                 vals=vals.Arrays(shape=(self.sweeper_samplecount,))
             )
             
-            for p, units in ( ('r', 'dB'), ('x','dB'), ('y','dB'),('phase', 'deg') ) :
+            for p, units in ( ('r', 'dB'), ('x','$V_o/V_i$'), ('y','$V_o/V_i$'),('phase', 'deg') ) :
                 self.add_parameter( f'trace_{p}',
                         unit= units,
                         label= p,
@@ -122,8 +123,41 @@ class HF2LIDemod(InstrumentChannel):
                         get_cmd= partial(self._get_sweep_param, p ),
                         vals=vals.Arrays(shape=(self.sweeper_samplecount,))
                     )
-                
-            self.auto_trigger = False 
+            
+            # DAQ spectrum parameters
+            daq_module = self.daq.dataAcquisitionModule()
+            daq_module.set('device', self.dev_id)
+            self.daq_module = daq_module
+
+            spectrum_params = ( ( 'duration', 's', 'acquisition duration'),
+                ('samplecount', '', 'points'))
+            
+            for namex, unit, label in spectrum_params:
+                self.add_parameter( f'spectrum_{namex}',
+                        unit=unit,
+                        label=label,
+                        set_cmd = partial(self.daq_module.set, namex),
+                        get_cmd = partial(self._daq_module_get, namex)
+                )
+
+            self.add_parameter( 'spectrum_frequency',
+                unit='Hz',
+                label= 'Frequency',
+                snapshot_value=False,
+                get_cmd= self._get_spectrum_frequency,
+                vals=vals.Arrays(shape=(self._spectrum_freq_length,))
+            )
+
+            self.add_parameter( 'spectrum_psd',
+                unit='V^2/Hz',
+                label='Power spectral density',
+                parameter_class = ParameterWithSetpoints,
+                setpoints = (self.spectrum_frequency,),
+                get_cmd = self._get_spectrum_param,
+                vals=vals.Arrays(shape=(self._spectrum_freq_length,)))
+
+
+            self.auto_trigger = False
         
         self.add_parameter(
             name = 'osc',
@@ -269,26 +303,6 @@ class HF2LIDemod(InstrumentChannel):
         )
 
         self.daq.sync()
-        self.daq_module = self.daq.dataAcquisitionModule()
-
-        self._averages = 1 # keep averaging turned off for now
-        # self.add_parameter( 
-        #         name = 'averages',
-        #         unit='npts',
-        #         label= 'Averaging',
-        #         # set_cmd = partial( setattr, self, '_averages' ),
-        #         # get_cmd = partial( getattr, self, '_averages' )
-        #         get_cmd = partial(self._get_averages),
-        #         set_cmd = partial(self._set_averages),
-        #     )
-  
-        self._bits = 8
-        self.add_parameter( 'psd_points', 
-            unit = '',
-            label = 'Points',
-            set_cmd = self._set_points,
-            get_cmd = lambda : 2**self._bits
-        )
 
         self.auto_trigger = False 
 
@@ -403,6 +417,9 @@ class HF2LIDemod(InstrumentChannel):
         """ wrap zi sweeper.get"""
         return self.sweeper.get( name )[name][0]
     
+    def _daq_module_get(self, name):
+        return self.daq_module.get(name)[name][0]
+    
     def _get_sigout_range(self, sigout=None ) -> float:
         if sigout is None :
             sigout = self.sigout
@@ -486,17 +503,32 @@ class HF2LIDemod(InstrumentChannel):
         if param == 'phase' :
             values = (self.samples[param])*180/np.pi
 
-        else :
-            # detect which node we are sweeping with
-            osc = self.osc()
+        elif param == 'r':
             amplitude = self.sigout_amplitude() / np.sqrt(2) # normalization factor for vpk
-            # values = self.samples[param] # - amplitude
             values = 20 * np.log10( self.samples[param] / amplitude )
+
+        else :
+            amplitude = self.sigout_amplitude() / np.sqrt(2) # normalization factor for vpk
+            values = self.samples[param] / amplitude
 
         return values
     
     def _get_spectrum_param(self, param):
-        return self.spectrum_samples[param]
+        return self.spectrum_samples['value'][0]
+    
+    def _spectrum_freq_length(self):
+        return len(self.spectrum_samples["timestamp"][0])
+
+    def _get_spectrum_frequency(self):
+        bin_count = len(self.spectrum_samples["value"][0])
+        bin_resolution = self.spectrum_samples["header"]["gridcoldelta"][0]
+        center_freq = self.spectrum_samples['header']['center'][0]
+        frequencies = np.arange(bin_count)
+
+        bandwidth = bin_resolution * len(frequencies)
+        frequencies = center_freq + (
+        frequencies * bin_resolution - bandwidth / 2.0 + bin_resolution / 2.0)
+        return frequencies
 
     def trigger_sweep(self):
         # sweeper = self.daq.sweep()
@@ -538,43 +570,32 @@ class HF2LIDemod(InstrumentChannel):
         sweeper.unsubscribe(path) ### Unsubscribe from the signal path
 
     def trigger_spectrum(self):
-            daq_module = self.daq_module
-            #self.snapshot(update=True)
-            daq_module.set("type", 0)  # was "mode" before with zoomfft-- assumed this corresponds to triggering mode
+        daq_module = self.daq_module
+        #self.snapshot(update=True)
+        daq_module.set('device', self.dev_id)
+        daq_module.set("type", 0) # continuous triggering
+        daq_module.set("grid/mode", 2) 
+        daq_module.set("count", 1) # num_bursts
+        daq_module.set("duration", self.spectrum_duration())
+        daq_module.set("grid/cols", self.spectrum_samplecount())
+        
+        path = f"/{self.dev_id}/demods/{self.demod}/sample.xiy.fft.abs.pwr" # power spectral density
+        daq_module.subscribe(path)
+        daq_module.execute()
 
-            # 0=not overlapped, 1=overlapped
-            daq_module.set("spectrum/overlapped", 0)
-            daq_module.set("refreshrate", 0)
+        start = time.time()
+        timeout = 60000  # [s]
 
-            # 0=Rectangular, 1=Hann, 2=Hamming, 3=Blackman Harris,
-            # 16=Exponential, 17=Cosine, 18=Cosine squared.
-            daq_module.set("fft/window", 1)
-            daq_module.set("fft/absolute", 1) # Return absolute frequencies instead of relative to 0.
-            # daq_module.set("bit", self._bits ) # The number of lines is 2**bits.
-            daq_module.set("grid/cols", self._bits ) # The number of lines is 2**bits.
-            daq_module.set("grid/repetitions", self._averages )
-            self.daq_module.set('spectrum/autobandwidth', 1) # automatically set bandwidth
-            # self.daq_module.set('grid/repetitions', 50)
-            path = "/%s/demods/%d/sample.xiy.fft.abs" % (self.dev_id, self.demod)
-            daq_module.subscribe(path)
-            daq_module.execute()
-            # maybe need to "spectrum/enable" somewhere here?
+        while not daq_module.finished():
+            time.sleep(0.2)
+            progress = daq_module.progress()
+            if (time.time() - start) > timeout:
+                print("\ndaqModule still not finished, forcing finish...")
+                daq_module.finish()
 
-            start = time.time()
-            timeout = 60000  # [s]
-
-            while not daq_module.finished():
-                time.sleep(0.2)
-                progress = daq_module.progress()
-                if (time.time() - start) > timeout:
-                    print("\ndaqModule still not finished, forcing finish...")
-                    daq_module.finish()
-            print("")
-
-            return_flat_data_dict = True
-            data = daq_module.read(return_flat_data_dict)
-            self.spectrum_samples = data[path][0][0]
-            daq_module.unsubscribe(path)
+        data = daq_module.read(True)
+        self.spectrum_samples = data[path][0]
+        daq_module.unsubscribe(path)
 
 class HF2LI(Instrument):
     """
