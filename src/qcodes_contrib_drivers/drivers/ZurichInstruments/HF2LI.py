@@ -129,16 +129,26 @@ class HF2LIDemod(InstrumentChannel):
             daq_module.set('device', self.dev_id)
             self.daq_module = daq_module
 
-            spectrum_params = ( ( 'duration', 's', 'acquisition duration'),
-                ('samplecount', '', 'points'))
+            self.add_parameter( 'spectrum_samplecount',
+                unit='',
+                label='number of points',
+                set_cmd = partial(self.daq_module.set, 'grid/cols'),
+                get_cmd = partial(self._daq_module_get, 'grid/cols')
+            )
+
+            self.add_parameter( 'spectrum_average',
+                unit='',
+                label='number to average',
+                set_cmd = partial(self.daq_module.set, 'grid/repetitions'),
+                get_cmd = partial(self._daq_module_get, 'grid/repetitions')
+            )
             
-            for namex, unit, label in spectrum_params:
-                self.add_parameter( f'spectrum_{namex}',
-                        unit=unit,
-                        label=label,
-                        set_cmd = partial(self.daq_module.set, namex),
-                        get_cmd = partial(self._daq_module_get, namex)
-                )
+            self.add_parameter('spectrum_duration',
+                unit='s',
+                label='spectrum duration',
+                set_cmd= partial(self.daq_module.set, 'duration'),
+                get_cmd=partial(self._daq_module_get, 'duration')
+            )
 
             self.add_parameter( 'spectrum_frequency',
                 unit='Hz',
@@ -148,7 +158,7 @@ class HF2LIDemod(InstrumentChannel):
                 vals=vals.Arrays(shape=(self._spectrum_freq_length,))
             )
 
-            self.add_parameter( 'spectrum_psd',
+            self.add_parameter( 'spectrum_power',
                 unit='V^2/Hz',
                 label='Power spectral density',
                 parameter_class = ParameterWithSetpoints,
@@ -418,7 +428,11 @@ class HF2LIDemod(InstrumentChannel):
         return self.sweeper.get( name )[name][0]
     
     def _daq_module_get(self, name):
-        return self.daq_module.get(name)[name][0]
+        path = name.split('/')
+        param = self.daq_module.get(name)
+        for i in path:
+            param = param[i]
+        return param[0]
     
     def _get_sigout_range(self, sigout=None ) -> float:
         if sigout is None :
@@ -513,8 +527,8 @@ class HF2LIDemod(InstrumentChannel):
 
         return values
     
-    def _get_spectrum_param(self, param):
-        return self.spectrum_samples['value'][0]
+    def _get_spectrum_param(self):
+        return np.power(self.spectrum_samples['value'][0], 2) # convert |FFT| to psd by squaring
     
     def _spectrum_freq_length(self):
         return len(self.spectrum_samples["timestamp"][0])
@@ -574,13 +588,15 @@ class HF2LIDemod(InstrumentChannel):
         #self.snapshot(update=True)
         daq_module.set('device', self.dev_id)
         daq_module.set("type", 0) # continuous triggering
-        daq_module.set("grid/mode", 2) 
+        daq_module.set("grid/mode", 4) 
         daq_module.set("count", 1) # num_bursts
-        daq_module.set("duration", self.spectrum_duration())
         daq_module.set("grid/cols", self.spectrum_samplecount())
+        daq_module.set('grid/repetitions', self.spectrum_average())
         
-        path = f"/{self.dev_id}/demods/{self.demod}/sample.xiy.fft.abs.pwr" # power spectral density
+        path = f"/{self.dev_id}/demods/{self.demod}/sample.xiy.fft" # .pwr?
+        filter_path = f'/{self.dev_id}/demods/{self.demod}/sample.xiy.fft.abs.filter'
         daq_module.subscribe(path)
+        daq_module.subscribe(filter_path)
         daq_module.execute()
 
         start = time.time()
@@ -588,13 +604,13 @@ class HF2LIDemod(InstrumentChannel):
 
         while not daq_module.finished():
             time.sleep(0.2)
-            progress = daq_module.progress()
             if (time.time() - start) > timeout:
                 print("\ndaqModule still not finished, forcing finish...")
                 daq_module.finish()
 
         data = daq_module.read(True)
         self.spectrum_samples = data[path][0]
+        self.filter = data[filter_path][0]
         daq_module.unsubscribe(path)
 
 class HF2LI(Instrument):
