@@ -136,9 +136,10 @@ class HF2LIDemod(InstrumentChannel):
                 get_cmd = partial(self._daq_module_get, 'grid/cols')
             )
 
-            self.add_parameter( 'spectrum_average',
+            self.add_parameter( 'spectrum_repetitions',
                 unit='',
-                label='number to average',
+                label='number of spectra to acquire',
+                initial_value = 1,
                 set_cmd = partial(self.daq_module.set, 'grid/repetitions'),
                 get_cmd = partial(self._daq_module_get, 'grid/repetitions')
             )
@@ -535,12 +536,8 @@ class HF2LIDemod(InstrumentChannel):
     
     def _get_spectrum_power(self):
         # Divide out the filter transfer function from the (averaged) absolute FFT of the spectrum, and then square the result.
-        if self.daq_module.get('grid/repetitions' > 1):
-            compensated_samples = self.spectrum_samples['value'][0] / self.spectrum_filter['value'][0]
-            return np.power(compensated_samples, 2)# convert compensated FFT to psd by squaring
-        else:
-            compensated_samples = self.spectrum_fft['value'][0] / self.spectrum_filter['value'][0]
-            return np.power(compensated_samples, 2)
+        compensated_samples = self.spectrum_samples['value'][0] / self.spectrum_filter['value'][0]
+        return np.power(compensated_samples, 2) # convert compensated FFT to psd by squaring
         
     def _spectrum_freq_length(self):
         return len(self.spectrum_samples["timestamp"][0])
@@ -595,11 +592,10 @@ class HF2LIDemod(InstrumentChannel):
         self.samples = data[path][0][0]
         sweeper.unsubscribe(path) ### Unsubscribe from the signal path
 
-    def trigger_spectrum(self, subscribed_paths = ("sample.xiy.fft.abs", "sample.xiy.fft.abs.filter", "sample.xiy.fft.abs.avg") ):
+    def trigger_spectrum(self, subscribed_paths = ("sample.xiy.fft.abs.filter", "sample.xiy.fft.abs.avg") ):
         """
         Default things to subscribe:
         sample.xiy.fft.abs.filter
-        sample.xiy.fft.abs
         sample.xiy.fft.abs.avg
         """
         daq_module = self.daq_module
@@ -629,14 +625,11 @@ class HF2LIDemod(InstrumentChannel):
                 daq_module.finish()
 
         data = daq_module.read(True)
-        self.spectrum_fft = data[f"/{self.dev_id}/demods/{self.demod}/sample.xiy.fft.abs"][0]
         self.spectrum_filter = data[f"/{self.dev_id}/demods/{self.demod}/sample.xiy.fft.abs.filter"][0]
         self.spectrum_samples = data[f"/{self.dev_id}/demods/{self.demod}/sample.xiy.fft.abs.avg"][0]
         
         for p in subscribed_paths:
             daq_module.unsubscribe(path)
-
-        daq_module.set('grid/repetitions', 1)  # reset number of averages to 1, so that spectrum_average doesn't always have to be called.
 
 class HF2LI(Instrument):
     """
