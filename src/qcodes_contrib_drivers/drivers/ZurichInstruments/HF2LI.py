@@ -166,7 +166,7 @@ class HF2LIDemod(InstrumentChannel):
             )
 
             self.add_parameter( 'spectrum_power',
-                unit='V^2/Hz',
+                unit='$\mathrm{V}^2$/Hz',
                 label='Power spectral density',
                 parameter_class = ParameterWithSetpoints,
                 setpoints = (self.spectrum_frequency,),
@@ -535,9 +535,10 @@ class HF2LIDemod(InstrumentChannel):
         return values
     
     def _get_spectrum_power(self):
-        # Divide out the filter transfer function from the (averaged) absolute FFT of the spectrum, and then square the result.
+        # Divide out the filter transfer function from the (averaged) absolute FFT of the spectrum.
         compensated_samples = self.spectrum_samples['value'][0] / self.spectrum_filter['value'][0]
-        return np.power(compensated_samples, 2) # convert compensated FFT to psd by squaring
+        # convert compensated FFT to PSD by squaring and normalizing by frequency bin width
+        return np.power(compensated_samples, 2) / self.spectrum_samples["header"]["gridcoldelta"][0]
         
     def _spectrum_freq_length(self):
         return len(self.spectrum_samples["timestamp"][0])
@@ -605,7 +606,7 @@ class HF2LIDemod(InstrumentChannel):
         daq_module.set("grid/mode", 4) 
         daq_module.set("count", 1) # number of triggers
         daq_module.set("grid/cols", self.spectrum_samplecount())
-        daq_module.set('grid/repetitions', self.spectrum_average())
+        daq_module.set('grid/repetitions', self.spectrum_repetitions())
         daq_module.set("spectrum/frequencyspan", self.spectrum_span())
         
         for p in subscribed_paths :
@@ -627,7 +628,7 @@ class HF2LIDemod(InstrumentChannel):
         data = daq_module.read(True)
         self.spectrum_filter = data[f"/{self.dev_id}/demods/{self.demod}/sample.xiy.fft.abs.filter"][0]
         self.spectrum_samples = data[f"/{self.dev_id}/demods/{self.demod}/sample.xiy.fft.abs.avg"][0]
-        
+
         for p in subscribed_paths:
             daq_module.unsubscribe(path)
 
