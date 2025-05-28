@@ -106,7 +106,7 @@ class SP1060Channel(InstrumentChannel, SP1060Reader):
         
         """clarify difference with registered"""
         self.volt: Parameter = self.add_parameter('volt',
-                           label = 'C {}'.format(channel),
+                           label = 'Ch{}'.format(channel),
                            unit = 'V',
                            set_cmd = self._set_voltage,
                            set_parser = self._vval_to_dacval,
