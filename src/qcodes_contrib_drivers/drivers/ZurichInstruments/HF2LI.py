@@ -200,7 +200,8 @@ class HF2LIDemod(InstrumentChannel):
         self.add_parameter(
             name = 'sigin',
             label = 'Sigin Index',
-            get_cmd = self._get_sigin,
+            get_cmd = self._get_sigin, 
+            set_cmd = self._set_sigin,
             vals = vals.Numbers(0, 1),
             docstring = """\
             Input signal.
@@ -342,14 +343,24 @@ class HF2LIDemod(InstrumentChannel):
         """
         Look up index of the input signal
         """
-        sigin_index = f'/{self.dev_id}/demods/{self.demod}/adcselect/'
+        # LOGIC: check demod number. If 6/7, use
+        # daq.setInt('/dev1792/plls/0/adcselect', 0)
+        # otherwise stay with what is below
+        demod_n = int(self.demod)
+        if demod_n in (6,7):
+            sigin_index = f'/{self.dev_id}/plls/{demod_n-6}/adcselect/'
+        else:
+            sigin_index = f'/{self.dev_id}/demods/{self.demod}/adcselect/'
         return self.daq.getInt(sigin_index)
     
     def _set_sigin(self, val: int) -> int:
         """
         Set the index of the input signal
         """
-        sigin_index = f'/{self.dev_id}/demods/{self.demod}/adcselect/'
+        demod_n = int(self.demod)
+        if demod_n not in (6,7):
+            raise ValueError('Can only set input for Demod 6,7')
+        sigin_index = f'/{self.dev_id}/plls/{demod_n-6}/adcselect/'
         self.daq.setInt(sigin_index, val)
         
     def _get_sigout(self):
