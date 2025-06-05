@@ -16,6 +16,9 @@ from qcodes_contrib_drivers.drivers.OxfordInstruments._decsvisa.src.decs_visa_to
 from qcodes_contrib_drivers.drivers.OxfordInstruments._decsvisa.src.decs_visa_tools.decs_visa_settings import SHUTDOWN
 from qcodes_contrib_drivers.drivers.OxfordInstruments._decsvisa.src.decs_visa_tools.decs_visa_settings import WRITE_DELIM
 
+import hlab
+from pathlib import Path
+
 '''
 
     Please see the README.md file in this directory for setup instructions.
@@ -23,11 +26,15 @@ from qcodes_contrib_drivers.drivers.OxfordInstruments._decsvisa.src.decs_visa_to
 '''
 
 #############################################
-#    Configuration settings required     #
+#    Configuration settings -- customized for hlab     #
 #############################################
 
 # supply the file path from your working directory to the decs_visa.py file
-decs_visa_path = "../../src/qcodes_contrib_drivers/drivers/OxfordInstruments/_decsvisa/src/decs_visa.py"
+src = Path(hlab.config.current['scripts']['default_path'])
+DECS_RELATIVE = "Qcodes_contrib_drivers/src/qcodes_contrib_drivers/drivers/OxfordInstruments/_decsvisa/src"
+decs_visa_path = src / DECS_RELATIVE / 'decs_visa.py'
+decs_visa_path = decs_visa_path.expanduser()
+# decs_visa_path = "../../src/qcodes_contrib_drivers/drivers/OxfordInstruments/_decsvisa/src/decs_visa.py"
 
 #############################################
 #    System configuration settings     #
@@ -35,7 +42,7 @@ decs_visa_path = "../../src/qcodes_contrib_drivers/drivers/OxfordInstruments/_de
 
 # Does the system have a superconducting
 # magnet fitted:
-SYSTEM_HAS_MAGNET=True
+SYSTEM_HAS_MAGNET=False
 
 # If there is a superconducting magnet
 # is it fitted with a switch:
@@ -150,7 +157,8 @@ class oiDECS(VisaInstrument):
 
         time.sleep(1)
 
-        super().__init__(name, f'TCPIP::{HOST}::{PORT}::SOCKET', terminator=WRITE_DELIM, **kwargs)
+        super().__init__(name, f'TCPIP::{HOST}::{PORT}::SOCKET', 
+                         terminator=WRITE_DELIM, **kwargs)
 
         self.add_parameter(
             "PT1_Head_Temperature",
@@ -195,7 +203,7 @@ class oiDECS(VisaInstrument):
         self.add_parameter(
             "Still_Plate_Temperature",
             unit="K",
-            label=name,
+            label='$T_\mathrm{STILL}$',
             get_cmd="get_STILL_T",
             get_parser=float
         )
@@ -212,7 +220,7 @@ class oiDECS(VisaInstrument):
         self.add_parameter(
             "Cold_Plate_Temperature",
             unit="K",
-            label=name,
+            label='$T_\\mathrm{CP}$',
             get_cmd="get_CP_T",
             get_parser=float
         )
@@ -220,7 +228,7 @@ class oiDECS(VisaInstrument):
         self.add_parameter(
             "Mixing_Chamber_Temperature",
             unit="K",
-            label=name,
+            label='$T_\mathrm{MC}$',
             get_cmd="get_MC_T",
             set_cmd=partial(self._param_setter, "set_MC_T"),
             get_parser=float
