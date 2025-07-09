@@ -36,7 +36,7 @@ class SpectrumArray(ParameterWithSetpoints):
 
     def get_raw(self):
         # :TRACe[:DATA]? need to test this live
-        # i think we can access the visa resource with somethign like self.instrument.visa_handle
+        # i think we can access the resource with somethign like self.instrument.visa_handle
         sa = self.instrument
         visa_handle = sa.visa_handle
 

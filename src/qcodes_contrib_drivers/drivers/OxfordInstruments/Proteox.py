@@ -187,7 +187,7 @@ class oiDECS(VisaInstrument):
         self.add_parameter(
             "PT2_Plate_Temperature",
             unit="K",
-            label=name,
+            label="$T_\\mathrm{PT2,PLATE}$",
             get_cmd="get_DR2_T",
             get_parser=float
         )

@@ -604,6 +604,10 @@ class HF2LIDemod(InstrumentChannel):
         self.samples = data[path][0][0]
         sweeper.unsubscribe(path) ### Unsubscribe from the signal path
 
+    def sample(self) -> dict:
+        path = f'/{self.parent.dev_id}/demods/{self.demod}/sample/'
+        return self.daq.getSample(path)
+
     def trigger_spectrum(self, subscribed_paths = ("sample.xiy.fft.abs.filter", "sample.xiy.fft.abs.avg") ):
         """
         Default things to subscribe:
@@ -643,6 +647,35 @@ class HF2LIDemod(InstrumentChannel):
         for p in subscribed_paths:
             daq_module.unsubscribe(path)
 
+    def _get_data(self, poll_length=0.1) -> float:
+        path = f'/{self.dev_id}/demods/{self.demod}/sample'
+        self.daq.unsubscribe("*")
+        poll_timeout = 500  # [ms]
+        poll_flags = 0
+        poll_return_flat_dict = True
+        self.daq.sync()
+        self.daq.subscribe(path)
+        data = self.daq.poll(poll_length, poll_timeout, poll_flags, poll_return_flat_dict)
+        self.daq.unsubscribe("*")
+        return data
+
+    def readout(self, poll_length : Optional[float] = 0.1 ):
+        """ record self.demod
+        Args:
+            poll_length: length of time in seconds to record for
+        Returns:
+            X, Y, t as np arrays
+        """
+        path = f'/{self.dev_id}/demods/{self.demod}/sample'
+        data = self._get_data( poll_length=poll_length )
+        sample = data[path]
+        X = sample['x']
+        Y = sample['y']
+        clockbase = float(self.daq.getInt(f'/{self.dev_id}/clockbase'))
+        t = (sample['timestamp'] - sample['timestamp'][0]) / clockbase 
+        return (X, Y, t)
+    
+
 class HF2LI(Instrument):
     """
     Qcodes driver for Zurich Instruments HF2LI lockin amplifier.
@@ -667,7 +700,8 @@ class HF2LI(Instrument):
         sigout2mixer: mapping from sigout to mixers. For default HF2LI {0:6, 1:7}
         num_sigout_mixer_channels: Number of mixer channels to enable on the sigouts. Default: 1.
     """
-    OUTPUT_MAPPING = {-1: 'manual', 0: 'X', 1: 'Y', 2: 'R', 3: 'Theta'}
+    # OUTPUT_MAPPING = {-1: 'manual', 0: 'X', 1: 'Y', 2: 'R', 3: 'Theta'}
+    OUTPUT_MAPPING = {1: 'manual', 0: 'X', 3: 'Y'}#, 2: 'R', 3: 'Theta'}
     def __init__(self, name: str, device: str, demod: int, sigout: int,
             auxouts: Dict[str, int], 
             sigout2mixer : Dict[ int, int ]={0:6, 1:7},
@@ -774,11 +808,6 @@ class HF2LI(Instrument):
         keys = list(self.OUTPUT_MAPPING.keys())
         idx = keys[list(self.OUTPUT_MAPPING.values()).index(channel)]
         self.daq.setInt(path, idx)
-
-    
-    def sample(self) -> dict:
-        path = f'/{self.dev_id}/demods/{self.demod}/sample/'
-        return self.daq.getSample(path)
         
     def ask(self,arg) :
         """" hacking in an ask method
