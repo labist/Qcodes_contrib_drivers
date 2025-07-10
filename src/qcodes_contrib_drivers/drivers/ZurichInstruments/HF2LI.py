@@ -604,10 +604,6 @@ class HF2LIDemod(InstrumentChannel):
         self.samples = data[path][0][0]
         sweeper.unsubscribe(path) ### Unsubscribe from the signal path
 
-    def sample(self) -> dict:
-        path = f'/{self.parent.dev_id}/demods/{self.demod}/sample/'
-        return self.daq.getSample(path)
-
     def trigger_spectrum(self, subscribed_paths = ("sample.xiy.fft.abs.filter", "sample.xiy.fft.abs.avg") ):
         """
         Default things to subscribe:
