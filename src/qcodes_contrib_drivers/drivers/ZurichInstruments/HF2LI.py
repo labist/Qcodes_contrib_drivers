@@ -697,7 +697,7 @@ class HF2LI(Instrument):
         num_sigout_mixer_channels: Number of mixer channels to enable on the sigouts. Default: 1.
     """
     # OUTPUT_MAPPING = {-1: 'manual', 0: 'X', 1: 'Y', 2: 'R', 3: 'Theta'}
-    OUTPUT_MAPPING = {1: 'manual', 0: 'X', 3: 'Y'}#, 2: 'R', 3: 'Theta'}
+    # OUTPUT_MAPPING = {1: 'manual', 0: 'X', 3: 'Y'}#, 2: 'R', 3: 'Theta'}
     def __init__(self, name: str, device: str, demod: int, sigout: int,
             auxouts: Dict[str, int], 
             sigout2mixer : Dict[ int, int ]={0:6, 1:7},
@@ -716,7 +716,7 @@ class HF2LI(Instrument):
 
         for ch in self.auxouts: #NOT MIGRATED
             self.add_parameter( #NOT MIGRATED
-                name=ch,
+                name=f'aux_{ch}',
                 label=f'Scaled {ch} output value',
                 unit='V',
                 get_cmd=lambda channel=ch: self._get_output_value(channel),
@@ -725,7 +725,7 @@ class HF2LI(Instrument):
             )
 
             self.add_parameter( #NOT MIGRATED
-                name=f'offset_{ch}',
+                name=f'offset_aux_{ch}',
                 label=f'{ch} output offset',
                 unit='V',
                 get_cmd=lambda channel=ch: self._get_offset(channel),
@@ -734,15 +734,15 @@ class HF2LI(Instrument):
                 vals=vals.Numbers(-2560, 2560),
                 docstring=f'Manual offset for {ch}, applied after scaling.'
             )
-            self.add_parameter(
-                name=f'output_{ch}',
-                label=f'{ch} output select',
-                get_cmd=lambda channel=ch: self._get_output_select(channel),
-                get_parser=str
-            )
+            # self.add_parameter(
+            #     name=f'output_{ch}',
+            #     label=f'{ch} output select',
+            #     get_cmd=lambda channel=ch: self._get_output_select(channel),
+            #     get_parser=str
+            # )
             # Making output select only gettable, since we are
             # explicitly mapping auxouts to X, Y, R, Theta, etc.
-            self._set_output_select(ch)
+            # self._set_output_select(ch)
             
         self.add_parameter( #NOT MIGRATED
             name='ext_clk',
@@ -775,35 +775,35 @@ class HF2LI(Instrument):
         return bool( val )
      
     def _get_gain(self, channel: str) -> float:
-        path = f'/{self.dev_id}/auxouts/{self.auxouts[channel]}/scale/'
+        path = f'/{self.dev_id}/auxouts/{channel}/scale/'
         return self.daq.getDouble(path)
 
     def _set_gain(self, gain: float, channel: str) -> None:
-        path = f'/{self.dev_id}/auxouts/{self.auxouts[channel]}/scale/'
+        path = f'/{self.dev_id}/auxouts/{channel}/scale/'
         self.daq.setDouble(path, gain)
 
     def _get_offset(self, channel: str) -> float:
-        path = f'/{self.dev_id}/auxouts/{self.auxouts[channel]}/offset/'
+        path = f'/{self.dev_id}/auxouts/{channel}/offset/'
         return self.daq.getDouble(path)
 
     def _set_offset(self, offset: float, channel: str) -> None:
-        path = f'/{self.dev_id}/auxouts/{self.auxouts[channel]}/offset/'
+        path = f'/{self.dev_id}/auxouts/{channel}/offset/'
         self.daq.setDouble(path, offset)
 
     def _get_output_value(self, channel: str) -> float:
-        path = f'/{self.dev_id}/auxouts/{self.auxouts[channel]}/value/'
+        path = f'/{self.dev_id}/auxouts/{channel}/value/'
         return self.daq.getDouble(path)
 
-    def _get_output_select(self, channel: str) -> str:
-        path = f'/{self.dev_id}/auxouts/{self.auxouts[channel]}/outputselect/'
-        idx = self.daq.getInt(path)
-        return self.OUTPUT_MAPPING[idx]
+    # def _get_output_select(self, channel: str) -> str:
+    #     path = f'/{self.dev_id}/auxouts/{self.auxouts[channel]}/outputselect/'
+    #     idx = self.daq.getInt(path)
+    #     return self.OUTPUT_MAPPING[idx]
 
-    def _set_output_select(self, channel: str) -> None:
-        path = f'/{self.dev_id}/auxouts/{self.auxouts[channel]}/outputselect/'
-        keys = list(self.OUTPUT_MAPPING.keys())
-        idx = keys[list(self.OUTPUT_MAPPING.values()).index(channel)]
-        self.daq.setInt(path, idx)
+    # def _set_output_select(self, channel: str) -> None:
+    #     path = f'/{self.dev_id}/auxouts/{self.auxouts[channel]}/outputselect/'
+    #     keys = list(self.OUTPUT_MAPPING.keys())
+    #     idx = keys[list(self.OUTPUT_MAPPING.values()).index(channel)]
+    #     self.daq.setInt(path, idx)
         
     def ask(self,arg) :
         """" hacking in an ask method
