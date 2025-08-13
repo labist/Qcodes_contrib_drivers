@@ -236,7 +236,7 @@ class HF2LIDemod(InstrumentChannel):
                 snapshot_value = True,
                 set_cmd = self._set_sigout_offset,
                 get_cmd = self._get_sigout_offset,
-                vals = vals.Numbers(-1, 1),
+                vals = vals.Numbers(-10, 10),
                 docstring = 'Multiply by sigout_range to get actual offset voltage.'
             )    
         
@@ -397,8 +397,8 @@ class HF2LIDemod(InstrumentChannel):
         """
         path = f'/{self.dev_id}/demods/{self.demod}/sample/'
         sample = self.daq.getSample(path)
-        cmplx = sample['x'] + 1j*sample['y']
-        return np.angle(cmplx)*180/np.pi
+        rad = np.atan2(sample['y'],sample['x'])
+        return rad*180/np.pi
     
     def _get_phase(self) -> float:
         """Get the phase shift of the demodulator"""
@@ -453,8 +453,8 @@ class HF2LIDemod(InstrumentChannel):
         return param[0]
     
     def _get_sigout_range(self, sigout=None ) -> float:
-        if sigout is None :
-            sigout = self.sigout
+        # if sigout is None :
+        #     sigout = self.sigout
         path = f'/{self.dev_id}/sigouts/{self.sigout()}/range/'
         return self.daq.getDouble(path)
 
@@ -473,6 +473,7 @@ class HF2LIDemod(InstrumentChannel):
         path = f'/{self.dev_id}/sigouts/{self.sigout()}/offset/'
         range = self._get_sigout_range()
         return self.daq.setDouble(path, offset/range)
+
     
     def _get_sigout_amplitude(self) -> float:
         mixer_channel = self.sigout() + 6
