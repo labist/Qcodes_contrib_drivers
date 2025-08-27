@@ -42,7 +42,7 @@ class HF2LIDemod(InstrumentChannel):
 
         # self.model = self._parent.model
         
-        if int(demod) in range(6): # x, y, theta only for first 6 demods 
+        if int(demod) in range(6): # x, y, theta, r only for first 6 demods 
             single_values = (('x', 'Demodulated x', 'V'),
                         ('y', 'Demodulated y', 'V') )
             
@@ -59,6 +59,14 @@ class HF2LIDemod(InstrumentChannel):
                     label=f'Demodulated theta'+ str(self.demod),
                     unit='deg',
                     get_cmd= self._get_theta,
+                    get_parser=float
+                )
+            
+            self.add_parameter(
+                    name=f'r',
+                    label=f'Demodulated r'+ str(self.demod),
+                    unit='V',
+                    get_cmd= self._get_r,
                     get_parser=float
                 )
             
@@ -399,6 +407,14 @@ class HF2LIDemod(InstrumentChannel):
         sample = self.daq.getSample(path)
         rad = np.atan2(sample['y'],sample['x'])
         return rad*180/np.pi
+    
+    def _get_r(self):
+        """
+        get r. only works for demods 0-5. 
+        """
+        path = f'/{self.dev_id}/demods/{self.demod}/sample/'
+        sample = self.daq.getSample(path)
+        return np.sqrt(sample['y']**2 + sample['x']**2)
     
     def _get_phase(self) -> float:
         """Get the phase shift of the demodulator"""
