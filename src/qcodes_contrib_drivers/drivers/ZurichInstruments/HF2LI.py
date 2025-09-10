@@ -688,6 +688,104 @@ class HF2LIDemod(InstrumentChannel):
         t = (sample['timestamp'] - sample['timestamp'][0]) / clockbase 
         return (X, Y, t)
     
+class HF2LIAuxout(InstrumentChannel):
+    """
+    HF2LI auxout
+    """
+    def __init__(self, parent: Instrument, name: str, channel : str) -> None:
+        """
+        Args:
+            parent: The Instrument instance to which the channel is
+                to be attached (HF2LI).
+            name: The 'colloquial' name of the channel
+            channel: name for ZI to look up
+        """
+
+        super().__init__(parent, name)
+        self.ch = channel
+        self.dev_id = self.parent.dev_id
+        self.daq = self.parent.daq
+
+        self.add_parameter( 
+            name=f'val',
+            label=f'Scaled output value',
+            unit='V',
+            get_cmd=self._get_output_value,
+            get_parser=float,
+            docstring=f'Scaled and demodulated value.'
+        )
+
+        self.add_parameter(
+            name=f'offset',
+            label=f'output offset',
+            unit='V',
+            get_cmd=self._get_offset,
+            get_parser=float,
+            set_cmd= self._set_offset,
+            vals=vals.Numbers(-2560, 2560),
+            docstring=f'Manual offset for {self.ch}, applied after scaling.'
+        )
+        
+        self.add_parameter(
+            name=f'signal',
+            label=f'output select',
+            get_cmd=self._get_output_select,
+            set_cmd=self._set_output_select,
+            get_parser=str
+        )
+
+        self.add_parameter(
+            name=f'gain',
+            label=f'output gain',
+            get_cmd=self._get_gain,
+            set_cmd=self._set_gain,
+            get_parser=str
+        )
+
+        self.add_parameter(
+            name=f'demod',
+            label=f'linked demodulator',
+            get_cmd=self._get_demod,
+            set_cmd=self._set_demod,
+            get_parser=str
+        )
+
+    def _get_gain(self) -> float:
+        path = f'/{self.dev_id}/auxouts/{self.ch}/scale/'
+        return self.daq.getDouble(path)
+
+    def _set_gain(self, gain: float) -> None:
+        path = f'/{self.dev_id}/auxouts/{self.ch}/scale/'
+        self.daq.setDouble(path, gain)
+
+    def _get_offset(self) -> float:
+        path = f'/{self.dev_id}/auxouts/{self.ch}/offset/'
+        return self.daq.getDouble(path)
+
+    def _set_offset(self, offset: float) -> None:
+        path = f'/{self.dev_id}/auxouts/{self.ch}/offset/'
+        self.daq.setDouble(path, offset)
+
+    def _get_output_value(self) -> float:
+        path = f'/{self.dev_id}/auxouts/{self.ch}/value/'
+        return self.daq.getDouble(path)
+
+    def _get_output_select(self) -> str:
+        path = f'/{self.dev_id}/auxouts/{self.ch}/outputselect/'
+        idx = self.daq.getInt(path)
+        return idx
+
+    def _set_output_select(self, val) -> None:
+        path = f'/{self.dev_id}/auxouts/{self.ch}/outputselect/'
+        self.daq.setInt(path, val)
+
+    def _get_demod(self) -> str:
+        path = f'/{self.dev_id}/auxouts/{self.ch}/demodselect'
+        return self.daq.getInt(path)
+    
+    def _set_demod(self, demod):
+        path = f'/{self.dev_id}/auxouts/{self.ch}/demodselect/'
+        self.daq.setInt(path, demod)
 
 class HF2LI(Instrument):
     """
@@ -730,36 +828,6 @@ class HF2LI(Instrument):
         self.auxouts = auxouts
         log.info(f'Successfully connected to {name}.')
         self.sigout2mixer = sigout2mixer
-
-        for ch in self.auxouts: #NOT MIGRATED
-            self.add_parameter( #NOT MIGRATED
-                name=f'aux_{ch}',
-                label=f'Scaled {ch} output value',
-                unit='V',
-                get_cmd=lambda channel=ch: self._get_output_value(channel),
-                get_parser=float,
-                docstring=f'Scaled and demodulated {ch} value.'
-            )
-
-            self.add_parameter( #NOT MIGRATED
-                name=f'offset_aux_{ch}',
-                label=f'{ch} output offset',
-                unit='V',
-                get_cmd=lambda channel=ch: self._get_offset(channel),
-                get_parser=float,
-                set_cmd=lambda offset, channel=ch: self._set_offset(offset, channel),
-                vals=vals.Numbers(-2560, 2560),
-                docstring=f'Manual offset for {ch}, applied after scaling.'
-            )
-            # self.add_parameter(
-            #     name=f'output_{ch}',
-            #     label=f'{ch} output select',
-            #     get_cmd=lambda channel=ch: self._get_output_select(channel),
-            #     get_parser=str
-            # )
-            # Making output select only gettable, since we are
-            # explicitly mapping auxouts to X, Y, R, Theta, etc.
-            # self._set_output_select(ch)
             
         self.add_parameter( #NOT MIGRATED
             name='ext_clk',
@@ -776,6 +844,11 @@ class HF2LI(Instrument):
             demod = HF2LIDemod(self, d_name, d)
             self.add_submodule(d_name, demod)
 
+        auxchannels = [str(i) for i in range(4)]
+        for ch in auxchannels:
+            ch_name = f'aux{ch}'
+            channel = HF2LIAuxout(self,ch_name,ch)
+            self.add_submodule(ch_name, channel)
 
     
     def _set_ext_clk(self, val):
@@ -791,36 +864,6 @@ class HF2LI(Instrument):
         val = self.daq.getInt( path )
         return bool( val )
      
-    def _get_gain(self, channel: str) -> float:
-        path = f'/{self.dev_id}/auxouts/{channel}/scale/'
-        return self.daq.getDouble(path)
-
-    def _set_gain(self, gain: float, channel: str) -> None:
-        path = f'/{self.dev_id}/auxouts/{channel}/scale/'
-        self.daq.setDouble(path, gain)
-
-    def _get_offset(self, channel: str) -> float:
-        path = f'/{self.dev_id}/auxouts/{channel}/offset/'
-        return self.daq.getDouble(path)
-
-    def _set_offset(self, offset: float, channel: str) -> None:
-        path = f'/{self.dev_id}/auxouts/{channel}/offset/'
-        self.daq.setDouble(path, offset)
-
-    def _get_output_value(self, channel: str) -> float:
-        path = f'/{self.dev_id}/auxouts/{channel}/value/'
-        return self.daq.getDouble(path)
-
-    # def _get_output_select(self, channel: str) -> str:
-    #     path = f'/{self.dev_id}/auxouts/{self.auxouts[channel]}/outputselect/'
-    #     idx = self.daq.getInt(path)
-    #     return self.OUTPUT_MAPPING[idx]
-
-    # def _set_output_select(self, channel: str) -> None:
-    #     path = f'/{self.dev_id}/auxouts/{self.auxouts[channel]}/outputselect/'
-    #     keys = list(self.OUTPUT_MAPPING.keys())
-    #     idx = keys[list(self.OUTPUT_MAPPING.values()).index(channel)]
-    #     self.daq.setInt(path, idx)
         
     def ask(self,arg) :
         """" hacking in an ask method
