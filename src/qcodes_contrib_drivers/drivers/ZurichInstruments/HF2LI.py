@@ -752,7 +752,7 @@ class HF2LIAuxout(InstrumentChannel):
 
     def _get_gain(self) -> float:
         path = f'/{self.dev_id}/auxouts/{self.ch}/scale/'
-        return self.daq.getDouble(path)
+        return float(self.daq.getDouble(path))
 
     def _set_gain(self, gain: float) -> None:
         path = f'/{self.dev_id}/auxouts/{self.ch}/scale/'
@@ -786,6 +786,45 @@ class HF2LIAuxout(InstrumentChannel):
     def _set_demod(self, demod):
         path = f'/{self.dev_id}/auxouts/{self.ch}/demodselect/'
         self.daq.setInt(path, demod)
+
+class HF2LIPid(InstrumentChannel):
+    """
+    HF2LI demod
+    """
+    def __init__(self, parent: Instrument, name: str, pid : str) -> None:
+        """
+        Args:
+            parent: The Instrument instance to which the channel is
+                to be attached (HF2LI).
+            name: The 'colloquial' name of the channel
+            pid: name for ZI to look up (integer 0-3)
+        """
+
+        super().__init__(parent, name)
+        self.pid = pid
+        self.dev_id = self.parent.dev_id
+        self.daq = self.parent.daq
+
+        self.add_parameter(
+            name = 'enabled',
+            label = 'Enabled',
+            get_cmd = self._get_on,
+            set_cmd = self._set_on,
+            vals = vals.Enum(0, 1),
+            docstring = """\
+            Turn PID on/off
+            0: PID off
+            1: PID on
+            """
+        )
+
+    def _set_on(self, val:int):
+        path = f'/{self.dev_id}/pids/{self.pid}/enable'
+        self.daq.setInt(path, val)
+
+    def _get_on(self) -> int:
+        path = f'/{self.dev_id}/pids/{self.pid}/enable'
+        return self.daq.getInt(path)
 
 class HF2LI(Instrument):
     """
@@ -850,7 +889,14 @@ class HF2LI(Instrument):
             channel = HF2LIAuxout(self,ch_name,ch)
             self.add_submodule(ch_name, channel)
 
-    
+        pids = [str(i) for i in range(4)]
+        for pid_num in pids:
+            pid_name = f'pid_{pid_num}'
+            pid = HF2LIPid(self, pid_name, pid_num)
+            self.add_submodule(pid_name, pid)
+            
+
+
     def _set_ext_clk(self, val):
         """ set external 10 MHz clock
         """
