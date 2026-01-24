@@ -790,7 +790,7 @@ class HF2LIAuxout(InstrumentChannel):
 
 class HF2LIPid(InstrumentChannel):
     """
-    HF2LI demod
+    HF2LI PID
     """
     def __init__(self, parent: Instrument, name: str, pid : str) -> None:
         """
@@ -800,27 +800,7 @@ class HF2LIPid(InstrumentChannel):
             name: The 'colloquial' name of the channel
             pid: name for ZI to look up (integer 0-3)
         """
-        input_mapping = {
-        0: {"name": "Demodulator X value", "unit": "Vrms"},
-        1: {"name": "Demodulator Y value", "unit": "Vrms"},
-        2: {"name": "Demodulator R value", "unit": "Vrms"},
-        3: {"name": "Demodulator Theta value", "unit": "deg"},
-        4: {"name": "Auxiliary Input", "unit": "V"},
-        5: {"name": "Auxiliary Output (as input)", "unit": "V"},
-        6: {"name": "Modulation Index", "unit": "[0,1]"},
-        7: {"name": "Dual Frequency Tracking |Z(n+)| - |Z(n)|", "unit": "Vrms"},
-        8: {"name": "Demodulator x(n+1) - x(n)", "unit": "Vrms"},
-        9: {"name": "Demodulator |z(n+1) - z(n)|", "unit": "Vrms"},
-        10: {"name": "Oscillator Frequency", "unit": "Hz"},
-        }
-
-        output_mapping = {
-        0: {"name": "Signal Output 1", "unit": "Vrms"},
-        1: {"name": "Signal Output 2", "unit": "Vrms"},
-        2: {"name": "Oscillator frequency", "unit": "Hz"},
-        3: {"name": "Auxiliary Output (manual mode)", "unit": "V"},
-        4: {"name": "DIO", "unit": "5 Volt TTL"},
-        }
+    
 
         super().__init__(parent, name)
         self.pid = pid
@@ -848,16 +828,16 @@ class HF2LIPid(InstrumentChannel):
             """
         )
 
-        self.add_parameter(
-            name = 'input_param',
-            label = 'PID input parameter',
-            get_cmd = self._get_input_param,
-            set_cmd = self._set_input_param,
-            vals = vals.Enum(0, 10),
-            docstring = """\
-            PID input parameter according to input_mapping
-            """
-        )
+        # self.add_parameter(
+        #     name = 'input_param',
+        #     label = 'PID input parameter',
+        #     get_cmd = self._get_input_param,
+        #     set_cmd = self._set_input_param,
+        #     vals = vals.Enum(0, 10),
+        #     docstring = """\
+        #     PID input parameter according to input_mapping
+        #     """
+        # )
 
         self.add_parameter(
             name = 'center',
@@ -869,15 +849,15 @@ class HF2LIPid(InstrumentChannel):
             """
         )
 
-        self.add_parameter(
-            name = 'range',
-            label = 'Range of value of output parameter',
-            get_cmd = self._get_range,
-            set_cmd = self._set_range,
-            docstring = """\
-            Range of value of output parameter of pid
-            """
-        )
+        # self.add_parameter(
+        #     name = 'range',
+        #     label = 'Range of value of output parameter',
+        #     get_cmd = self._get_range,
+        #     set_cmd = self._set_range,
+        #     docstring = """\
+        #     Range of value of output parameter of pid
+        #     """
+        # )
 
         # self.add_parameter(
         #     name = 'setpoint',
@@ -888,6 +868,27 @@ class HF2LIPid(InstrumentChannel):
         #     Input parameter setpoint
         #     """
         # )
+    # input_mapping = {
+    #     0: {"name": "Demodulator X value", "unit": "Vrms"},
+    #     1: {"name": "Demodulator Y value", "unit": "Vrms"},
+    #     2: {"name": "Demodulator R value", "unit": "Vrms"},
+    #     3: {"name": "Demodulator Theta value", "unit": "deg"},
+    #     4: {"name": "Auxiliary Input", "unit": "V"},
+    #     5: {"name": "Auxiliary Output (as input)", "unit": "V"},
+    #     6: {"name": "Modulation Index", "unit": "[0,1]"},
+    #     7: {"name": "Dual Frequency Tracking |Z(n+)| - |Z(n)|", "unit": "Vrms"},
+    #     8: {"name": "Demodulator x(n+1) - x(n)", "unit": "Vrms"},
+    #     9: {"name": "Demodulator |z(n+1) - z(n)|", "unit": "Vrms"},
+    #     10: {"name": "Oscillator Frequency", "unit": "Hz"},
+    #     }
+
+    # output_mapping = {
+    #     0: {"name": "Signal Output 1", "unit": "Vrms"},
+    #     1: {"name": "Signal Output 2", "unit": "Vrms"},
+    #     2: {"name": "Oscillator frequency", "unit": "Hz"},
+    #     3: {"name": "Auxiliary Output (manual mode)", "unit": "V"},
+    #     4: {"name": "DIO", "unit": "5 Volt TTL"},
+    #     }
 
     def _set_param(self, param, val):
         path = f'/{self.dev_id}/pids/{self.pid}/{params[param]["path"]}'
@@ -897,39 +898,39 @@ class HF2LIPid(InstrumentChannel):
         path = f'/{self.dev_id}/pids/{self.pid}/{self.params[param]["path"]}'
         return self.daq.getInt(path)
     
-    def _set_setpoint(self, param, val):
-        path = f'/{self.dev_id}/pids/{self.pid}/{params[param]["path"]}'
-        self.daq.setInt(path, val)
+    # def _set_setpoint(self, param, val):
+    #     path = f'/{self.dev_id}/pids/{self.pid}/{params[param]["path"]}'
+    #     self.daq.setInt(path, val)
 
-    def _get_setpoint(self, param):
-        path = f'/{self.dev_id}/pids/{self.pid}/setpoint'
-        return self.daq.getInt(path)
+    # def _get_setpoint(self, param):
+    #     path = f'/{self.dev_id}/pids/{self.pid}/setpoint'
+    #     return self.daq.getInt(path)
 
     def _set_on(self, val:int):
-        path = f'/{self.dev_id}/pids/{self.pid}/setpoint'
+        path = f'/{self.dev_id}/pids/{self.pid}/enable'
         self.daq.setInt(path, val)
 
     def _get_on(self) -> int:
         path = f'/{self.dev_id}/pids/{self.pid}/enable'
         return self.daq.getInt(path)
     
-    def _set_input_param(self, val:int):
-        path = f'/{self.dev_id}/pids/{self.pid}/input'
-        self.daq.setInt(path, val)
+    # def _set_input_param(self, val:int):
+    #     path = f'/{self.dev_id}/pids/{self.pid}/input'
+    #     self.daq.setInt(path, val)
 
-    def _get_input_param(self):
-        path = f'/{self.dev_id}/pids/{self.pid}/input'
-        val = self.daq.getInt(path)
-        return val, input_mapping[val]
+    # def _get_input_param(self):
+    #     path = f'/{self.dev_id}/pids/{self.pid}/input'
+    #     val = self.daq.getInt(path)
+    #     return val, input_mapping[val]
     
-    def _set_output_param(self, val:int):
-        path = f'/{self.dev_id}/pids/{self.pid}/input'
-        self.daq.setInt(path, val)
+    # def _set_output_param(self, val:int):
+    #     path = f'/{self.dev_id}/pids/{self.pid}/input'
+    #     self.daq.setInt(path, val)
 
-    def _get_output_param(self):
-        path = f'/{self.dev_id}/pids/{self.pid}/input'
-        val = self.daq.getInt(path)
-        return val, input_mapping[val]
+    # def _get_output_param(self):
+    #     path = f'/{self.dev_id}/pids/{self.pid}/input'
+    #     val = self.daq.getInt(path)
+    #     return val, input_mapping[val]
         
     def _set_center(self, val:int):
         path = f'/{self.dev_id}/pids/{self.pid}/center'
@@ -939,13 +940,13 @@ class HF2LIPid(InstrumentChannel):
         path = f'/{self.dev_id}/pids/{self.pid}/center'
         return self.daq.getDouble(path)
     
-    def _set_range(self, val:int):
-        path = f'/{self.dev_id}/pids/{self.pid}/range'
-        self.daq.setDouble(path, val)
+    # def _set_range(self, val:int):
+    #     path = f'/{self.dev_id}/pids/{self.pid}/range'
+    #     self.daq.setDouble(path, val)
 
-    def _get_range(self) -> int:
-        path = f'/{self.dev_id}/pids/{self.pid}/range'
-        return self.daq.getDouble(path)
+    # def _get_range(self) -> int:
+    #     path = f'/{self.dev_id}/pids/{self.pid}/range'
+    #     return self.daq.getDouble(path)
 
 
 class HF2LI(Instrument):
