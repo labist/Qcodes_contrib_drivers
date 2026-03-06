@@ -214,6 +214,16 @@ class HF2LIDemod(InstrumentChannel):
                 """
             )
 
+            self.add_parameter(
+                name = 'sample_rate',
+                label = 'demod sample rate',
+                get_cmd =partial( self._get_sample_rate ),
+                set_cmd =partial( self._set_sample_rate ),
+                docstring = """\
+                Sampling rate for demod. Sets to closest value. 
+                """
+            )
+
 
             self.auto_trigger = False
         
@@ -364,6 +374,15 @@ class HF2LIDemod(InstrumentChannel):
         self.daq.sync()
 
         self.auto_trigger = False 
+
+    def _get_sample_rate(self):
+        path = f'/{self.dev_id}/demods/{self.demod}/rate'
+        return self.daq.getDouble(path)
+    
+    def _set_sample_rate(self, rate: float) -> None:
+        """Set the phase shift of the demodulator"""
+        path = f'/{self.dev_id}/demods/{self.demod}/rate/'
+        self.daq.setDouble(path, rate)
 
     def _get_trigger_type(self):
         return self.daq_module.get('type')
