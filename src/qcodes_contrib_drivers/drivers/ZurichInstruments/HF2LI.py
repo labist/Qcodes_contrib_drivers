@@ -181,6 +181,38 @@ class HF2LIDemod(InstrumentChannel):
                 setpoints = (self.spectrum_frequency,),
                 get_cmd = self._get_spectrum_power,
                 vals=vals.Arrays(shape=(self._spectrum_freq_length,)))
+            
+            self.add_parameter(
+                name = 'trigger_node',
+                label = 'DAQ trigger node',
+                get_cmd =partial( self._get_trigger_node ),
+                set_cmd =partial( self._set_trigger_node ),
+                docstring = """\
+                Set input node for DAQ triggers, eg 'auxins/0/sample.AuxIn0' for Aux in 0
+                """
+            )
+
+            self.add_parameter(
+                name = 'trigger_type',
+                label = 'DAQ trigger type',
+                get_cmd =partial( self._get_trigger_type ),
+                set_cmd =partial( self._set_trigger_type ),
+                docstring = """\
+                Set trigger type for DAQ. 
+                Some parameters are only valid for specific trigger types. 
+                The mapping is (from programming manual):
+                0 = trigger off
+                1 = analog edge trigger on source
+                2 = digital trigger mode on DIO source
+                3 = analog pulse trigger on source
+                4 = analog tracking trigger on source
+                5 = change trigger
+                6 = hardware trigger on trigger line
+                source
+                7 = tracking edge trigger on source
+                8 = event count trigger on counter source
+                """
+            )
 
 
             self.auto_trigger = False
@@ -332,6 +364,18 @@ class HF2LIDemod(InstrumentChannel):
         self.daq.sync()
 
         self.auto_trigger = False 
+
+    def _get_trigger_type(self):
+        return self.daq_module.get('type')
+    
+    def _set_trigger_type(self, type) -> int:
+        self.daq_module.set('type', type)
+
+    def _get_trigger_node(self):
+        return self.daq_module.get('triggernode')
+    
+    def _set_trigger_node(self, node) -> str:
+        self.daq_module.set('triggernode', f'/{self.dev_id}/{node}')
 
     def _get_frequency(self) -> float:
         """
