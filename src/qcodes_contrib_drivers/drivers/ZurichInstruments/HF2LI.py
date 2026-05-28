@@ -83,7 +83,7 @@ class HF2LIDemod(InstrumentChannel):
             demod_params = ( 
             ('timeconstant', 's'),
             ('order', ''),
-            ('rate', 'Hz'),
+            # ('rate', 'Hz'),
             ('harmonic', '')
             )
             for param, unit in demod_params :
@@ -211,6 +211,20 @@ class HF2LIDemod(InstrumentChannel):
                 source
                 7 = tracking edge trigger on source
                 8 = event count trigger on counter source
+                """
+            )
+
+            self.add_parameter(
+                name = 'trigger_edge',
+                label = 'DAQ trigger edge',
+                get_cmd =partial( self._get_trigger_edge ),
+                set_cmd =partial( self._set_trigger_edge ),
+                docstring = """\
+                Set trigger edge for DAQ edge trigger type.  
+                The mapping is (from API):
+                1 = positive
+                2 = negative
+                3 = both
                 """
             )
 
@@ -380,12 +394,18 @@ class HF2LIDemod(InstrumentChannel):
         return self.daq.getDouble(path)
     
     def _set_sample_rate(self, rate: float) -> None:
-        """Set the phase shift of the demodulator"""
+        """Set the sample rate of the demodulator"""
         path = f'/{self.dev_id}/demods/{self.demod}/rate/'
         self.daq.setDouble(path, rate)
 
     def _get_trigger_type(self):
         return self.daq_module.get('type')
+    
+    def _set_trigger_edge(self, type) -> int:
+        self.daq_module.set('edge', type)
+
+    def _get_trigger_edge(self):
+        return self.daq_module.get('edge')
     
     def _set_trigger_type(self, type) -> int:
         self.daq_module.set('type', type)
@@ -674,7 +694,7 @@ class HF2LIDemod(InstrumentChannel):
 
         ### Wait until measurement is done 
         start_t = time.time()
-        timeout = 6000  # [s]
+        timeout = 12*3600  # [s]
         while not sweeper.finished():  # Wait until the sweep is complete, with timeout.
             time.sleep(1)
             progress = sweeper.progress()
@@ -723,6 +743,8 @@ class HF2LIDemod(InstrumentChannel):
 
         for p in subscribed_paths:
             daq_module.unsubscribe(path)
+        daq_module.set("spectrum/autobandwidth", 0)
+        daq_module.set("spectrum/enable", 0)
 
     def _get_data(self, poll_length=0.1) -> float:
         path = f'/{self.dev_id}/demods/{self.demod}/sample'
