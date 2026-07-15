@@ -201,6 +201,17 @@ class oiDECS(VisaInstrument):
         )
 
         self.add_parameter(
+            "Sorb_Temperature_Setpoint",
+            unit = "K",
+            label=name,
+            get_cmd = "get_SRB_TARGET",
+            set_cmd = partial(self._param_setter, "set_SRB_TARGET")
+        )
+
+        # "set_SRB_TARGET"    : "oi.decs.temperature_control.SRB_GGS_CL.setpoint",
+        # "get_SRB_TARGET"    : "oi.decs.temperature_control.SRB_GGS_CL.setpoint",
+
+        self.add_parameter(
             "Still_Plate_Temperature",
             unit="K",
             label='$T_\mathrm{STILL}$',
