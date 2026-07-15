@@ -729,7 +729,7 @@ class HF2LIDemod(InstrumentChannel):
         daq_module.execute()
 
         start = time.time()
-        timeout = 60000  # [s]
+        timeout = 600  # [s]
 
         while not daq_module.finished():
             time.sleep(0.2)
