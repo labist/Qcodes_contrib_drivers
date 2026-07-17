@@ -17,10 +17,10 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering",]
 license = "MIT AND GPL-2.0-or-later"
-license-files = [
-    "LICENSE_TEKTRONIX_AWG520_KEITHLEY_2700",
-    "LICENSE",
-]
+#license-files = [
+#    "LICENSE_TEKTRONIX_AWG520_KEITHLEY_2700",
+#    "LICENSE",
+#]
 requires-python = ">=3.11"
 dependencies = [
     "qcodes>=0.42.0",
