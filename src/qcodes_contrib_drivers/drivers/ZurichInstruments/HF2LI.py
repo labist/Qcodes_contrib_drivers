@@ -18,7 +18,7 @@ import qcodes.utils.validators as vals
 
 from qcodes.instrument.parameter import ParameterWithSetpoints, Parameter
 
-from qcodes.dataset.measurements import Measurement, res_type, DataSaver
+from qcodes.dataset.measurements import Measurement, DataSaver
 from qcodes.instrument.specialized_parameters import ElapsedTimeParameter
 
 class HF2LIDemod(InstrumentChannel):
