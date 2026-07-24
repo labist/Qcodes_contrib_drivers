@@ -1,5 +1,5 @@
 from typing import Dict, List, Optional, Sequence, Any, Union
-from functools import partial, partialmethod
+from functools import partial
 import numpy as np
 import logging
 
@@ -7,19 +7,14 @@ from py import process
 log = logging.getLogger(__name__)
 
 import time
-import matplotlib.pyplot as plt
 import numpy as np
 
 import zhinst.utils
-import qcodes as qc
-from qcodes.instrument.base import Instrument
-from qcodes.instrument import InstrumentChannel
+
+from qcodes.instrument import Instrument, InstrumentChannel
 import qcodes.utils.validators as vals
 
-from qcodes.instrument.parameter import ParameterWithSetpoints, Parameter
-
-from qcodes.dataset.measurements import Measurement, DataSaver
-from qcodes.instrument.specialized_parameters import ElapsedTimeParameter
+from qcodes.parameters import ParameterWithSetpoints
 
 class HF2LIDemod(InstrumentChannel):
     """
@@ -119,6 +114,7 @@ class HF2LIDemod(InstrumentChannel):
                 unit='Hz',
                 label= 'Frequency',
                 snapshot_value=False,
+                # get_cmd = lambda: np.arange(100),
                 get_cmd= lambda : self.samples['grid'],
                 vals=vals.Arrays(shape=(self.sweeper_samplecount,))
             )
@@ -543,7 +539,11 @@ class HF2LIDemod(InstrumentChannel):
 
     def _sweeper_get( self, name ) :
         """ wrap zi sweeper.get"""
-        return self.sweeper.get( name )[name][0]
+        value = self.sweeper.get( name )[name][0]
+        if isinstance(value, np.int64):
+            return int(value)
+        else:
+            return value
     
     def _daq_module_get(self, name):
         path = name.split('/')
