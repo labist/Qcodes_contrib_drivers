@@ -489,7 +489,7 @@ class HF2LIDemod(InstrumentChannel):
         """
         path = f'/{self.dev_id}/demods/{self.demod}/sample/'
         sample = self.daq.getSample(path)
-        rad = np.atan2(sample['y'],sample['x'])
+        rad = np.arctan2(sample['y'],sample['x'])
         return rad*180/np.pi
     
     def _get_r(self):
