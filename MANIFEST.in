@@ -1,1 +1,4 @@
+
+#include LICENSE
+#include LICENSE_TEKTRONIX_AWG520_KEITHLEY_2700
 include src/qcodes_contrib_drivers/sims/*
